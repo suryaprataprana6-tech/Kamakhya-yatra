@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #2d3748;
+  
+  --primary: #0b1c3e;
+  --primary-light: #1e3c72;
+  --secondary: #d4af37;
+  --secondary-hover: #c5a028;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@theme {
+  --font-sans: var(--font-inter), sans-serif;
+  --font-heading: var(--font-outfit), sans-serif;
+  --font-serif: var(--font-playfair), serif;
+  
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+
+  --animate-plane-fly: planeFly 20s linear infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes planeFly {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-3deg);
+  }
+  25% {
+    transform: translate3d(35vw, -2.5vh, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate3d(70vw, -5vh, 0) rotate(-5deg);
+  }
+  75% {
+    transform: translate3d(105vw, -7.5vh, 0) rotate(-1deg);
+  }
+  100% {
+    transform: translate3d(140vw, -10vh, 0) rotate(-3deg);
   }
 }
 
 body {
-  background: var(--background);
+  font-family: var(--font-sans);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* Custom Glassmorphism Utility */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-plane-fly {
+    animation-play-state: paused !important;
+  }
+}
+
+
