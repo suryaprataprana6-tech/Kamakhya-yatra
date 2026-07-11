@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { ShieldCheck, ClipboardList, Info, Calendar } from "lucide-react";
+import { ShieldCheck, Calendar } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy | Kamakhya Yatra",
@@ -197,52 +197,7 @@ export default function RefundPolicyPage() {
             ))}
           </div>
 
-          {/* Styled Table Section */}
-          <div className="bg-white rounded-3xl border border-slate-200/60 shadow-lg p-6 md:p-10 mb-12">
-            <div className="flex items-center gap-3 mb-6">
-              <ClipboardList className="w-6 h-6 text-[#d4af37]" />
-              <h2 className="font-heading font-extrabold text-xl md:text-2xl text-[#0b1c3e]">Booking & Cancellation Timeframes</h2>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse rounded-xl overflow-hidden">
-                <thead>
-                  <tr className="bg-[#0b1c3e] text-white">
-                    <th className="p-4 font-bold text-xs uppercase tracking-wider">Timeframe Before Travel</th>
-                    <th className="p-4 font-bold text-xs uppercase tracking-wider">Booking Percentage Required</th>
-                    <th className="p-4 font-bold text-xs uppercase tracking-wider">Refund Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  <tr className="bg-white hover:bg-slate-50 transition">
-                    <td className="p-4 font-semibold text-slate-700">1 Month</td>
-                    <td className="p-4 text-slate-600">Full Booking Required</td>
-                    <td className="p-4 text-red-600 font-extrabold">Non-Refundable / No Refund</td>
-                  </tr>
-                  <tr className="bg-slate-50/50 hover:bg-slate-50 transition">
-                    <td className="p-4 font-semibold text-slate-700">15 Days</td>
-                    <td className="p-4 text-slate-600">50% Advance Booking Allowed</td>
-                    <td className="p-4 text-emerald-600 font-extrabold">Refund Subject to Verification</td>
-                  </tr>
-                  <tr className="bg-white hover:bg-slate-50 transition">
-                    <td className="p-4 font-semibold text-slate-700">7 Days</td>
-                    <td className="p-4 text-slate-600">25% Booking Allowed</td>
-                    <td className="p-4 text-emerald-600 font-extrabold">Refund Subject to Verification</td>
-                  </tr>
-                  <tr className="bg-slate-50/50 hover:bg-slate-50 transition">
-                    <td className="p-4 font-semibold text-slate-700">4 Days</td>
-                    <td className="p-4 text-slate-600">No Booking Taken</td>
-                    <td className="p-4 text-emerald-600 font-extrabold">Refund Subject to Verification</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="mt-4 flex gap-2 items-start text-xs text-slate-400 bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-              <p>Refunds marked above are subject to recovery from third-party travel vendors (airlines, hotels, train ticketing, transport suppliers) and prior management approval.</p>
-            </div>
-          </div>
+
 
           {/* Closing Note Section */}
           <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center max-w-3xl mx-auto shadow-sm">
