@@ -54,6 +54,9 @@ export const metadata: Metadata = {
     description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
     images: ["/hero-kamakhya.png"],
   },
+  verification: {
+    google: "g-TSdJa4MvXjFuXke3TvRsMuGsNzYpAi-6PvQpT4aSY",
+  },
 };
 
 export default function RootLayout({
