@@ -12,6 +12,7 @@ import {
   CalendarCheck, UserCheck, Camera, Award, Heart, Star
 } from "lucide-react";
 import Image from "next/image";
+import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
 
 export default function Home() {
   const router = useRouter();
@@ -37,31 +38,29 @@ export default function Home() {
     return packagesData.filter(p => p.category === "International").slice(0, 3);
   }, []);
 
-  const handleBookTour = async (e: React.FormEvent) => {
+  const handleBookTour = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!bookingData.name.trim() || !bookingData.phone.trim()) {
+      alert("Please fill in your name and phone number.");
+      return;
+    }
+
     setIsBooking(true);
     
-    try {
-      const response = await fetch("http://localhost:5000/api/book-tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookingData),
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        alert("Booking request received successfully! Our travel specialist will contact you shortly.");
-        setBookingData({ name: "", phone: "", package: "Amarnath Yatra", date: "" });
-      }
-    } catch (error) {
-      console.error("Booking error:", error);
-      const text = `Hello Kamakhya Yatra, I would like to inquire about the "${bookingData.package}" package. My name is ${bookingData.name} and phone is ${bookingData.phone}. Preferred travel date: ${bookingData.date}.`;
-      const whatsappUrl = `https://wa.me/917079044000?text=${encodeURIComponent(text)}`;
-      alert("Booking server is busy. Connecting you directly to our WhatsApp helpdesk...");
-      window.open(whatsappUrl, "_blank");
-    } finally {
+    // Redirect to WhatsApp
+    sendInquiryToWhatsApp({
+      name: bookingData.name,
+      phone: bookingData.phone,
+      package: bookingData.package,
+      date: bookingData.date
+    });
+
+    // Reset and feedback
+    setTimeout(() => {
+      alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
       setIsBooking(false);
-    }
+      setBookingData({ name: "", phone: "", package: "Amarnath Yatra", date: "" });
+    }, 500);
   };
 
 

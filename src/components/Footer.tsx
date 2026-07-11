@@ -1,4 +1,4 @@
-import { MapPin, Phone, Mail } from "lucide-react";
+import { MapPin, Phone, Mail, BadgeCheck, ShieldCheck, Award } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -78,6 +78,24 @@ const socialLinks = [
   },
 ];
 
+const trustBadges = [
+  {
+    label: "MSME Registered",
+    subtext: "Government of India Certified (Reg. details pending)",
+    icon: BadgeCheck,
+  },
+  {
+    label: "GST Registered",
+    subtext: "Tax Compliant Business Entity (GSTIN pending)",
+    icon: ShieldCheck,
+  },
+  {
+    label: "Trademark Registered",
+    subtext: "Kamakhya Yatra® Brand Protection",
+    icon: Award,
+  },
+];
+
 export default function Footer() {
   return (
     <footer className="bg-[#0b1c3e] text-slate-300 border-t border-white/5 pt-16 pb-8 px-6">
@@ -124,6 +142,26 @@ export default function Footer() {
                 {social.icon}
               </a>
             ))}
+          </div>
+
+          {/* ── Trust & Certification Badges ── */}
+          <div className="flex flex-col gap-2 mt-5 pt-5 border-t border-white/5">
+            <span className="text-[9px] uppercase font-extrabold text-slate-500 tracking-wider">Accreditation & Trust</span>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {trustBadges.map((badge, idx) => {
+                const IconComponent = badge.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:border-white/20 transition cursor-default shadow-inner"
+                    title={badge.subtext}
+                  >
+                    <IconComponent className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                    <span className="text-[10px] font-bold text-slate-200 tracking-wide">{badge.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

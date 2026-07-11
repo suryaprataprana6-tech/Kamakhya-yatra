@@ -6,6 +6,7 @@ import { getPackageBySlug } from "../data/packages";
 import { Check, Clock, MapPin, Star, IndianRupee, MessageCircle, Phone, ArrowLeft, Send } from "lucide-react";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
+import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
 
 export default function TourDetailPage() {
   const params = useParams();
@@ -47,37 +48,28 @@ export default function TourDetailPage() {
     window.open(url, "_blank");
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!bookingForm.name.trim() || !bookingForm.phone.trim()) {
+      alert("Please fill in your name and phone number.");
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const payload = {
+    // Redirect to WhatsApp
+    sendInquiryToWhatsApp({
       name: bookingForm.name,
       phone: bookingForm.phone,
       package: tour.title,
       date: bookingForm.date
-    };
+    });
 
-    try {
-      const response = await fetch("http://localhost:5000/api/book-tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert(`Thank you ${bookingForm.name}! Your booking request for ${tour.title} has been received. Our luxury travel specialist will call you shortly.`);
-        setBookingForm({ name: "", phone: "", date: "" });
-      } else {
-        alert("Failed to submit booking. Please try again.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to connect to the booking server. Connecting you via WhatsApp...");
-      handleWhatsAppInquiry();
-    } finally {
+    setTimeout(() => {
+      alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
       setIsSubmitting(false);
-    }
+      setBookingForm({ name: "", phone: "", date: "" });
+    }, 500);
   };
 
   return (

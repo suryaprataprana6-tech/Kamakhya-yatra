@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { MapPin, Phone, Mail, Send, Check } from "lucide-react";
+import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
 
 export default function ContactUsPage() {
   const [formData, setFormData] = useState({
     name: "",
+    phone: "",
     email: "",
     subject: "Inquiry about Spiritual Tour",
     message: ""
@@ -16,16 +18,27 @@ export default function ContactUsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate submission
+    if (!formData.name.trim() || !formData.phone.trim()) {
+      alert("Please enter both Name and Phone Number.");
+      return;
+    }
+
     setSubmitted(true);
-    // WhatsApp fallback option
+    
+    // Redirect to WhatsApp
+    sendInquiryToWhatsApp({
+      name: formData.name,
+      phone: formData.phone,
+      package: formData.subject,
+      email: formData.email,
+      message: formData.message
+    });
+
     setTimeout(() => {
-      const text = `Hello Kamakhya Yatra,\nMy name is ${formData.name}.\nEmail: ${formData.email}.\nSubject: ${formData.subject}.\nMessage: ${formData.message}`;
-      const url = `https://wa.me/917079044000?text=${encodeURIComponent(text)}`;
-      window.open(url, "_blank");
+      alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
       setSubmitted(false);
-      setFormData({ name: "", email: "", subject: "Inquiry about Spiritual Tour", message: "" });
-    }, 1500);
+      setFormData({ name: "", phone: "", email: "", subject: "Inquiry about Spiritual Tour", message: "" });
+    }, 500);
   };
 
   return (
@@ -122,6 +135,19 @@ export default function ContactUsPage() {
                     placeholder="E.g. Rajesh Kumar"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="p-3 bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm transition"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="phone" className="text-xs font-bold text-[#0b1c3e] uppercase tracking-wider">Phone Number</label>
+                  <input 
+                    type="tel" 
+                    id="phone"
+                    required
+                    placeholder="E.g. +91 99999 99999"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="p-3 bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm transition"
                   />
                 </div>

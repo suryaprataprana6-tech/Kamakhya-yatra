@@ -6,6 +6,7 @@ import { packagesData } from "@/data/packages";
 import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
 
 function BookingFormContent() {
   const searchParams = useSearchParams();
@@ -37,30 +38,40 @@ function BookingFormContent() {
     }
   }, [slugParam]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim() || !formData.phone.trim()) {
+      alert("Please fill in your name and phone number.");
+      return;
+    }
+
     setIsSubmitting(true);
 
-    try {
-      const response = await fetch("http://localhost:5000/api/book-tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert("Your yatra booking request has been submitted successfully! Our representative will call you shortly.");
-        router.push("/");
-      }
-    } catch (err) {
-      console.error(err);
-      const msg = `Hello Kamakhya Yatra, I want to book the ${formData.package} package starting on ${formData.date} for ${formData.guests} guests. My name is ${formData.name} (${formData.phone}).`;
-      const url = `https://wa.me/917079044000?text=${encodeURIComponent(msg)}`;
-      alert("Failed to reach booking server. Redirecting you to WhatsApp to complete booking...");
-      window.open(url, "_blank");
-    } finally {
+    // Redirect to WhatsApp
+    sendInquiryToWhatsApp({
+      name: formData.name,
+      phone: formData.phone,
+      package: formData.package,
+      date: formData.date,
+      guests: formData.guests,
+      email: formData.email,
+      message: formData.message
+    });
+
+    setTimeout(() => {
+      alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
       setIsSubmitting(false);
-    }
+      setFormData({
+        name: "",
+        phone: "",
+        email: "",
+        package: packagesData.length > 0 ? packagesData[0].title : "",
+        date: "",
+        guests: "2",
+        message: ""
+      });
+      router.push("/");
+    }, 500);
   };
 
   return (
