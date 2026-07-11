@@ -181,10 +181,11 @@ export default function Footer() {
           <h4 className="text-white font-heading font-extrabold text-sm uppercase tracking-wider border-l-2 border-[#d4af37] pl-3">Quick Links</h4>
           <ul className="flex flex-col gap-2.5 text-sm font-semibold">
             <li><Link href="/" className="hover:text-[#d4af37] transition">Home</Link></li>
-            <li><Link href="/about" className="hover:text-[#d4af37] transition">About Us</Link></li>
-            <li><Link href="/contact" className="hover:text-[#d4af37] transition">Contact Us</Link></li>
-            <li><Link href="/privacy" className="hover:text-[#d4af37] transition">Privacy Policy</Link></li>
-            <li><Link href="/terms" className="hover:text-[#d4af37] transition">Terms & Conditions</Link></li>
+            <li><Link href="/about-us" className="hover:text-[#d4af37] transition">About Us</Link></li>
+            <li><Link href="/contact-us" className="hover:text-[#d4af37] transition">Contact Us</Link></li>
+            <li><Link href="/refund-policy" className="hover:text-[#d4af37] transition">Refund Policy</Link></li>
+            <li><Link href="/terms-conditions" className="hover:text-[#d4af37] transition">Terms & Conditions</Link></li>
+            <li><Link href="/privacy-policy" className="hover:text-[#d4af37] transition">Privacy Policy</Link></li>
           </ul>
         </div>
 
@@ -211,8 +212,9 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto border-t border-white/5 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
         <p>© {new Date().getFullYear()} Kamakhya Yatra. All Rights Reserved.</p>
         <div className="flex gap-4">
-          <Link href="/privacy" className="hover:underline">Privacy</Link>
-          <Link href="/terms" className="hover:underline">Terms</Link>
+          <Link href="/privacy-policy" className="hover:underline">Privacy</Link>
+          <Link href="/terms-conditions" className="hover:underline">Terms</Link>
+          <Link href="/refund-policy" className="hover:underline">Refunds</Link>
         </div>
       </div>
     </footer>
