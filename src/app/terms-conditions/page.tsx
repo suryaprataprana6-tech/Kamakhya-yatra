@@ -1,10 +1,17 @@
-"use client";
-
+import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import { Scale, FileText, Globe, Landmark, AlertTriangle, Calendar } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Terms & Conditions | Kamakhya Yatra",
+  description: "Read the traveler responsibilities, booking process, and legal terms and conditions of Kamakhya Yatra.",
+  alternates: {
+    canonical: "/terms-conditions",
+  },
+};
 
 export default function TermsConditionsPage() {
   const sections = [

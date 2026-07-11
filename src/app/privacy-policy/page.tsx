@@ -1,9 +1,16 @@
-"use client";
-
+import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ShieldCheck, Eye, Database, Share2, Mail, Calendar } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy | Kamakhya Yatra",
+  description: "Learn about how Kamakhya Yatra collects, uses, stores, and protects your personal data when booking tour packages.",
+  alternates: {
+    canonical: "/privacy-policy",
+  },
+};
 
 export default function PrivacyPolicyPage() {
   const sections = [

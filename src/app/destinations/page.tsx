@@ -1,10 +1,17 @@
-"use client";
-
+import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { MapPin, Compass, ArrowRight } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Dream Travel Destinations | Kamakhya Yatra",
+  description: "Explore our premium coordinates and top travel destinations. From Kedarnath and Char Dham pilgrimages to Kerala beach holidays, find your next yatra.",
+  alternates: {
+    canonical: "/destinations",
+  },
+};
 
 interface Destination {
   id: number;

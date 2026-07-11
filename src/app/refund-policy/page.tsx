@@ -1,9 +1,16 @@
-"use client";
-
+import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ShieldCheck, ClipboardList, Info, Calendar } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Refund & Cancellation Policy | Kamakhya Yatra",
+  description: "Read the refund, cancellation, and tour postponement guidelines of Kamakhya Yatra.",
+  alternates: {
+    canonical: "/refund-policy",
+  },
+};
 
 export default function RefundPolicyPage() {
   const policies = [

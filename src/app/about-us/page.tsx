@@ -1,13 +1,18 @@
-"use client";
-
+import type { Metadata } from "next";
 import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ShieldCheck, Compass, Heart, Users, Target, Eye } from "lucide-react";
-import { useRouter } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "About Us | Kamakhya Yatra - Premium Tour & Travel Agency",
+  description: "Learn about Kamakhya Yatra, a trusted travel partner in Ranchi, Jharkhand. Discover our mission, vision, and years of dedicated service in curating spiritual pilgrimages and premium holidays.",
+  alternates: {
+    canonical: "/about-us",
+  },
+};
 
 export default function AboutUsPage() {
-  const router = useRouter();
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 flex flex-col justify-between">
