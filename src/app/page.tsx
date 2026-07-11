@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
+import { googleReviewsData } from "@/data/reviews";
 
 export default function Home() {
   const router = useRouter();
@@ -65,38 +66,26 @@ export default function Home() {
 
 
 
-  const testimonials = [
-    {
-      name: "Priya Sharma",
-      date: "March, 2026",
-      text: "Our Kamakhya temple yatra was perfectly organized. Darshan timings, stay, and transport were all smooth. The team was caring and professional throughout.",
-      stars: 5
-    },
-    {
-      name: "Rahul Mehta",
-      date: "February, 2026",
-      text: "Booked a Darjeeling and Gangtok holiday package. Hotels were comfortable, itinerary was well planned, and the guide knew every local highlight. Highly recommend!",
-      stars: 5
-    },
-    {
-      name: "Ananya Das",
-      date: "January, 2026",
-      text: "Videsh Yatra to Nepal exceeded expectations. Visa help, sightseeing, and meals were handled seamlessly. Kamakhya Yatra made our family trip stress-free.",
-      stars: 5
-    },
-    {
-      name: "Vikram Singh",
-      date: "December, 2025",
-      text: "From enquiry to return, the Dharmic pilgrimage felt sacred and well-guided. Transparent pricing and responsive support. We will travel with them again.",
-      stars: 4
-    },
-    {
-      name: "Meera Nair",
-      date: "November, 2025",
-      text: "Excellent value on our Kerala holiday. Flight, hotel, and houseboat were coordinated without any last-minute surprises. Truly a premium experience.",
-      stars: 5
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewsPaused, setReviewsPaused] = useState(false);
+
+  React.useEffect(() => {
+    if (reviewsPaused) return;
+    const interval = setInterval(() => {
+      setReviewIndex((prev) => (prev + 1) % googleReviewsData.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [reviewsPaused]);
+
+  // Generate visible reviews based on active index
+  const visibleReviews = useMemo(() => {
+    const res = [];
+    const len = googleReviewsData.length;
+    for (let i = 0; i < 3; i++) {
+      res.push(googleReviewsData[(reviewIndex + i) % len]);
     }
-  ];
+    return res;
+  }, [reviewIndex]);
 
   const awards = [
     { title: "Prabhat Khabar", desc: "Certificate of appreciation · 35 years of journalism" },
@@ -407,29 +396,114 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 9. Reviews testimonials */}
-      <section className="py-20 px-6 bg-white">
+      {/* 9. Reviews testimonials (Verified Google Reviews) */}
+      <section className="py-20 px-6 bg-slate-50/50">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-5xl font-extrabold font-heading text-[#0b1c3e] mb-4">What Our Travelers Say</h2>
-            <p className="text-slate-500 max-w-xl mx-auto">Real stories and reviews from tourists who experienced the yatra with us.</p>
+          {/* Header & Rating Summary */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 border-b border-slate-200/60 pb-8">
+            <div>
+              <span className="text-[#d4af37] text-xs font-extrabold tracking-[0.2em] uppercase block mb-3">Traveler Experiences</span>
+              <h2 className="text-3xl md:text-5xl font-extrabold font-heading text-[#0b1c3e] mb-2">What Our Travelers Say</h2>
+              <p className="text-slate-500 text-sm">Real stories and reviews from tourists who experienced the yatra with us.</p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 shrink-0 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-extrabold text-[#0b1c3e] leading-none">5.0</span>
+                  <div className="flex text-amber-500 text-sm font-bold">★★★★★</div>
+                </div>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase mt-1 tracking-wider">Based on 9 Google Reviews</span>
+              </div>
+              <a 
+                href="https://search.google.com/local/writereview?placeid=ChIJw7S3Vf2b9TkR30fW_yWc_sE"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#0b1c3e] hover:bg-[#1e3c72] text-white text-xs font-extrabold px-5 py-3 rounded-xl transition duration-200 shadow hover:shadow-md flex items-center gap-1.5"
+              >
+                <span>Write a Review</span>
+                <span className="text-[10px]">✏️</span>
+              </a>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {testimonials.map((test, i) => (
-              <div key={i} className="bg-slate-50 p-8 rounded-2xl border border-slate-100 flex flex-col justify-between h-full">
-                <div className="flex justify-between items-center mb-6">
+
+          {/* Carousel Slider */}
+          <div 
+            className="relative"
+            onMouseEnter={() => setReviewsPaused(true)}
+            onMouseLeave={() => setReviewsPaused(false)}
+          >
+            {/* Cards Grid with responsive visibility */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 transition-all duration-500">
+              {visibleReviews.map((review, i) => (
+                <div 
+                  key={i} 
+                  className={[
+                    "bg-white p-8 rounded-2xl border border-slate-100 flex flex-col justify-between min-h-[250px] shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden",
+                    // Hide 2nd card on mobile, 3rd card on tablet
+                    i === 1 ? "hidden md:flex" : "",
+                    i === 2 ? "hidden lg:flex" : ""
+                  ].join(" ")}
+                >
                   <div>
-                    <h4 className="font-heading font-extrabold text-[#0b1c3e] text-base">{test.name}</h4>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">{test.date}</span>
+                    {/* Header: Avatar, Name & Google Verified Badge */}
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-heading font-extrabold text-sm ${review.avatarBg}`}>
+                          {review.avatarInitial}
+                        </div>
+                        <div>
+                          <h4 className="font-heading font-extrabold text-[#0b1c3e] text-sm leading-tight">{review.reviewerName}</h4>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">{review.date}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Google G Logo Badge */}
+                      <div className="flex items-center gap-1 bg-[#4285F4]/5 border border-[#4285f4]/10 rounded-full px-2 py-1 text-[9px] font-bold text-[#4285F4]">
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        <span className="hidden sm:inline">Google</span>
+                      </div>
+                    </div>
+
+                    {/* Star Rating */}
+                    <div className="flex text-amber-500 text-xs font-bold mb-4">
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <span key={idx}>{idx < review.rating ? "★" : "☆"}</span>
+                      ))}
+                    </div>
+
+                    {/* Review text */}
+                    <p className="text-slate-600 text-xs sm:text-sm leading-relaxed italic">
+                      "{review.reviewText}"
+                    </p>
                   </div>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: test.stars }).map((_, s) => (
-                      <Heart key={s} className="w-3.5 h-3.5 fill-[#e74c3c] text-none" />
-                    ))}
+                  
+                  {/* Subtle verified seal overlay */}
+                  <div className="text-[9px] text-[#25d366]/70 font-extrabold uppercase mt-6 pt-3 border-t border-slate-50 flex items-center gap-1 select-none pointer-events-none">
+                    <span>🛡️ Verified Google Review</span>
                   </div>
                 </div>
-                <p className="text-slate-600 text-sm italic leading-relaxed flex-grow">"{test.text}"</p>
-              </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dot Indicators */}
+          <div className="flex justify-center gap-2 mt-10">
+            {googleReviewsData.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setReviewIndex(idx)}
+                className={[
+                  "h-2 rounded-full transition-all duration-300",
+                  reviewIndex === idx ? "w-6 bg-[#0b1c3e]" : "w-2 bg-slate-300 hover:bg-slate-400"
+                ].join(" ")}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
             ))}
           </div>
         </div>
