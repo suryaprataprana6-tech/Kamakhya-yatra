@@ -3,10 +3,10 @@
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag } from "lucide-react";
+import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { logoutAdmin } from "./actions";
+import { logoutAdmin, deletePackage } from "./actions";
 
 interface AdminDashboardClientProps {
   initialPackages: any[];
@@ -23,6 +23,23 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
       p.category.toLowerCase().includes(search.toLowerCase())
     );
   }, [search, initialPackages]);
+
+  const handleDelete = async (id: number, title: string) => {
+    if (confirm(`Are you sure you want to delete '${title}'? This cannot be undone.`)) {
+      try {
+        const res = await deletePackage(id);
+        if (res.success) {
+          alert(`Successfully deleted '${title}'`);
+          router.refresh();
+        } else {
+          alert(res.error || "Failed to delete package.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("An error occurred during deletion.");
+      }
+    }
+  };
 
   const handleLogout = async () => {
     if (confirm("Are you sure you want to log out?")) {
@@ -60,15 +77,24 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
         <div className="max-w-7xl mx-auto px-6 py-12">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="relative w-full sm:w-[320px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search packages by title or location..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-sm bg-slate-50/50"
-              />
+            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+              <div className="relative w-full sm:w-[320px]">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search packages by title or location..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-sm bg-slate-50/50"
+                />
+              </div>
+
+              <Link
+                href="/admin/new"
+                className="inline-flex items-center gap-1.5 bg-[#d4af37] hover:bg-[#b8952d] text-white px-5 py-3 rounded-xl font-extrabold text-xs transition duration-200"
+              >
+                <Plus className="w-4 h-4" /> Add New Package
+              </Link>
             </div>
 
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -139,12 +165,21 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
 
                         {/* Actions */}
                         <td className="p-5 text-center">
-                          <Link
-                            href={`/admin/edit/${pkg.id}`}
-                            className="inline-flex items-center gap-1.5 bg-[#0b1c3e]/5 hover:bg-[#0b1c3e] text-[#0b1c3e] hover:text-white px-4 py-2 rounded-xl font-extrabold text-xs transition duration-200"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" /> Edit package
-                          </Link>
+                          <div className="flex items-center justify-center gap-2">
+                            <Link
+                              href={`/admin/edit/${pkg.id}`}
+                              className="inline-flex items-center gap-1.5 bg-[#0b1c3e]/5 hover:bg-[#0b1c3e] text-[#0b1c3e] hover:text-white px-4 py-2 rounded-xl font-extrabold text-xs transition duration-200"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
+                            </Link>
+                            <button
+                              onClick={() => handleDelete(pkg.id, pkg.title)}
+                              className="inline-flex items-center justify-center bg-red-50 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-xl font-extrabold text-xs transition duration-200"
+                              title="Delete package"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
