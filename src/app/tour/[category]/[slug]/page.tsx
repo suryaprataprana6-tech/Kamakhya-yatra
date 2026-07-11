@@ -1,14 +1,21 @@
 import { Metadata } from "next";
 import TourDetailPage from "@/components/TourDetailPage";
-import { getPackageBySlug } from "@/data/packages";
+import { supabaseServer } from "@/utils/supabaseServer";
 
 type Props = {
   params: Promise<{ category: string; slug: string }>;
 };
 
+export const revalidate = 60;
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const tour = getPackageBySlug(slug);
+  
+  const { data: tour } = await supabaseServer
+    .from("packages")
+    .select("*")
+    .eq("slug", slug)
+    .single();
 
   if (!tour) {
     return {
@@ -17,8 +24,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const title = `${tour.title} Package - ${tour.duration} from ₹${tour.price.toLocaleString("en-IN")} | Kamakhya Yatra`;
-  const description = `${tour.description} Book the perfect ${tour.title} tour package with Kamakhya Yatra. Inclusions: ${tour.inclusions.slice(0, 3).join(", ")}.`;
+  const title = `${tour.title} Package - ${tour.duration} from ₹${Number(tour.price).toLocaleString("en-IN")} | Kamakhya Yatra`;
+  const includedText = Array.isArray(tour.whats_included) ? tour.whats_included.slice(0, 3).join(", ") : "";
+  const description = `${tour.description} Book the perfect ${tour.title} tour package with Kamakhya Yatra. Inclusions: ${includedText}.`;
 
   return {
     title,
@@ -49,7 +57,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function TourDetailRoute({ params }: Props) {
   const { slug } = await params;
-  const tour = getPackageBySlug(slug);
+  
+  const { data: tour } = await supabaseServer
+    .from("packages")
+    .select("*")
+    .eq("slug", slug)
+    .single();
 
   if (!tour) {
     return <TourDetailPage />;
@@ -70,6 +83,7 @@ export default async function TourDetailRoute({ params }: Props) {
     }
   };
 
+  const itineraryArray = Array.isArray(tour.itinerary) ? tour.itinerary : [];
   const tripJsonLd = {
     "@context": "https://schema.org",
     "@type": "TouristTrip",
@@ -84,11 +98,18 @@ export default async function TourDetailRoute({ params }: Props) {
       "availability": "https://schema.org/InStock",
       "url": `https://www.kamakhyayatra.com/tour/${tour.category.toLowerCase()}/${tour.slug}`
     },
-    "itinerary": tour.itinerary.map(item => ({
+    "itinerary": itineraryArray.map((item: any) => ({
       "@type": "HowToStep",
       "name": item.day + ": " + item.title,
-      "text": item.details
+      "text": item.details || item.description
     }))
+  };
+
+  // Build a mapped tour object that aligns with the Client component expectations
+  const mappedTour = {
+    ...tour,
+    inclusions: tour.whats_included,
+    price: Number(tour.price)
   };
 
   return (
@@ -101,7 +122,7 @@ export default async function TourDetailRoute({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(tripJsonLd) }}
       />
-      <TourDetailPage />
+      <TourDetailPage tour={mappedTour} />
     </>
   );
 }

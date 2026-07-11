@@ -6,7 +6,7 @@ import { Search, Clock, IndianRupee, Star, Compass } from 'lucide-react';
 import { packagesData } from '../data/packages';
 import Image from 'next/image';
 
-export default function FeaturedPackages() {
+export default function FeaturedPackages({ packages }: { packages?: any[] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortOrder, setSortOrder] = useState('default');
@@ -19,7 +19,8 @@ export default function FeaturedPackages() {
   };
 
   const filteredAndSortedPackages = useMemo(() => {
-    let result = packagesData;
+    const activePackages = packages || packagesData;
+    let result = activePackages;
 
     if (activeCategory !== 'All') {
       result = result.filter(pkg => pkg.category === activeCategory);

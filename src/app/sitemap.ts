@@ -1,8 +1,14 @@
 import { MetadataRoute } from "next";
-import { packagesData } from "@/data/packages";
+import { supabaseServer } from "@/utils/supabaseServer";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = "https://www.kamakhyayatra.com";
+
+  // Fetch all packages dynamically from Supabase
+  const { data: packages } = await supabaseServer
+    .from("packages")
+    .select("slug, category")
+    .order("id", { ascending: true });
 
   // Static routes
   const staticRoutes = [
@@ -23,7 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   // Dynamic tour package routes
-  const tourRoutes = packagesData.map((pkg) => ({
+  const tourRoutes = (packages || []).map((pkg) => ({
     url: `${baseUrl}/tour/${pkg.category.toLowerCase()}/${pkg.slug}`,
     lastModified: new Date(),
     changeFrequency: "weekly" as const,

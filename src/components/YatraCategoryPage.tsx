@@ -10,9 +10,10 @@ import Image from "next/image";
 
 interface YatraCategoryPageProps {
   categorySlug: "dharmic" | "desh" | "videsh" | "holiday";
+  initialPackages?: any[];
 }
 
-export default function YatraCategoryPage({ categorySlug }: YatraCategoryPageProps) {
+export default function YatraCategoryPage({ categorySlug, initialPackages }: YatraCategoryPageProps) {
   // Determine category config based on URL path slug
   const config = useMemo(() => {
     switch (categorySlug) {
@@ -52,9 +53,11 @@ export default function YatraCategoryPage({ categorySlug }: YatraCategoryPagePro
     }
   }, [categorySlug]);
 
+  const activePackages = initialPackages || packagesData;
+
   // Filter packages based on path configuration
   const filteredPackages = useMemo(() => {
-    return packagesData.filter((pkg) => {
+    return activePackages.filter((pkg) => {
       if (categorySlug === "dharmic") {
         return pkg.category === "Spiritual";
       } else if (categorySlug === "videsh") {
@@ -67,7 +70,7 @@ export default function YatraCategoryPage({ categorySlug }: YatraCategoryPagePro
         return pkg.slug === "andaman-nicobar" || pkg.slug === "maldives-honeymoon" || pkg.category === "Holiday" && (pkg.slug === "koriginal-kerala-kanyakumari" || pkg.slug === "kashmir-paradise" || pkg.slug === "rajasthan-desert-tour");
       }
     });
-  }, [categorySlug]);
+  }, [categorySlug, activePackages]);
 
   return (
     <div className="bg-[#f7fafc] min-h-screen text-slate-800 flex flex-col justify-between">

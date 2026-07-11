@@ -8,9 +8,10 @@ import Portal from "./Portal";
 interface DestinationAutocompleteProps {
   value: string;
   onChange: (val: string) => void;
+  packages?: any[];
 }
 
-export default function DestinationAutocomplete({ value, onChange }: DestinationAutocompleteProps) {
+export default function DestinationAutocomplete({ value, onChange, packages }: DestinationAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef   = useRef<HTMLInputElement>(null);
@@ -18,11 +19,13 @@ export default function DestinationAutocomplete({ value, onChange }: Destination
   const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, width: 0 });
 
+  const activePackages = packages || packagesData;
+
   // Filter packages based on input search term
   const getFilteredItems = () => {
     const term = value.trim().toLowerCase();
-    if (!term) return packagesData;
-    return packagesData.filter(
+    if (!term) return activePackages;
+    return activePackages.filter(
       (pkg) =>
         pkg.title.toLowerCase().includes(term) ||
         pkg.category.toLowerCase().includes(term) ||

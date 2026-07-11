@@ -1,109 +1,23 @@
-"use client";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import AdminDashboardClient from "./AdminDashboardClient";
+import { supabaseServer } from "@/utils/supabaseServer";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Lock, Mail, ArrowRight } from "lucide-react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+export const revalidate = 0; // Disable server caching for the admin dashboard to get live data
 
-export default function AdminLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+export default async function AdminPage() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  if (!session || session.value !== "authenticated") {
+    redirect("/admin/login");
+  }
 
-    try {
-      const response = await fetch("http://localhost:5000/api/admin-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+  // Fetch all packages directly from Supabase
+  const { data: packages } = await supabaseServer
+    .from("packages")
+    .select("*")
+    .order("id", { ascending: true });
 
-      const data = await response.json();
-
-      if (data.success) {
-        localStorage.setItem("isAdminAuth", "true");
-        router.push("/dashboard");
-      } else {
-        setError(data.message || "Invalid credentials");
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to connect to the server.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-[#f7fafc] min-h-screen text-slate-800 flex flex-col justify-between">
-      <div>
-        <Navbar />
-
-        <div className="max-w-md mx-auto py-24 px-6">
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-extrabold text-[#0b1c3e]">Admin Portal</h2>
-              <p className="text-xs text-slate-400 mt-1">Login to manage bookings</p>
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold text-center mb-6">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleLogin} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#0b1c3e]">Email Address</label>
-                <div className="flex items-center gap-3 border border-slate-200 focus-within:border-[#0b1c3e] rounded-xl px-4 py-3 bg-slate-50 transition">
-                  <Mail className="w-5 h-5 text-slate-400" />
-                  <input
-                    type="email"
-                    placeholder="admin@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full bg-transparent text-sm font-semibold outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#0b1c3e]">Password</label>
-                <div className="flex items-center gap-3 border border-slate-200 focus-within:border-[#0b1c3e] rounded-xl px-4 py-3 bg-slate-50 transition">
-                  <Lock className="w-5 h-5 text-slate-400" />
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full bg-transparent text-sm font-semibold outline-none"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full bg-[#0b1c3e] hover:bg-[#1e3c72] disabled:bg-slate-400 text-white font-extrabold py-3.5 rounded-xl flex items-center justify-center gap-2 mt-2 transition shadow-lg shadow-[#0b1c3e]/10"
-              >
-                <span>{loading ? "Authenticating..." : "Login"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <Footer />
-    </div>
-  );
+  return <AdminDashboardClient initialPackages={packages || []} />;
 }

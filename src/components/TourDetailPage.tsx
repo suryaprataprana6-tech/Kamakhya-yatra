@@ -2,13 +2,13 @@
 
 import React, { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getPackageBySlug } from "../data/packages";
+import { getPackageBySlug, Package } from "../data/packages";
 import { Check, Clock, MapPin, Star, IndianRupee, MessageCircle, Phone, ArrowLeft, Send } from "lucide-react";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
 
-export default function TourDetailPage() {
+export default function TourDetailPage({ tour: initialTour }: { tour?: Package }) {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
@@ -23,8 +23,9 @@ export default function TourDetailPage() {
 
   // Retrieve the selected package
   const tour = useMemo(() => {
+    if (initialTour) return initialTour;
     return getPackageBySlug(slug);
-  }, [slug]);
+  }, [slug, initialTour]);
 
   if (!tour) {
     return (

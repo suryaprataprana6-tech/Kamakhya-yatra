@@ -8,12 +8,12 @@ import { Search, MapPin, Clock, Star, IndianRupee } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-export default function ToursClient() {
+export default function ToursClient({ initialPackages }: { initialPackages: any[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<"All" | "Spiritual" | "Holiday" | "International">("All");
 
   const filteredPackages = useMemo(() => {
-    return packagesData.filter((pkg) => {
+    return initialPackages.filter((pkg) => {
       const matchesSearch = pkg.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             pkg.location.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -21,7 +21,7 @@ export default function ToursClient() {
 
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, initialPackages]);
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 flex flex-col justify-between">

@@ -37,7 +37,7 @@ const fadeUp = (delay: number) => ({
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-export default function Hero() {
+export default function Hero({ packages }: { packages?: any[] }) {
   /* carousel state */
   const [current, setCurrent] = useState(0);
   useEffect(() => {
@@ -54,7 +54,8 @@ export default function Hero() {
   const [month, setMonth]             = useState("");
   const [guests, setGuests]           = useState("1 Adult · 3AC");
 
-  const popularItems = packagesData.filter(pkg => [1, 2, 7, 11, 12].includes(pkg.id));
+  const activePackages = packages || packagesData;
+  const popularItems = activePackages.filter(pkg => [1, 2, 7, 11, 12].includes(Number(pkg.id)));
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -462,7 +463,7 @@ export default function Hero() {
           <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4 items-center p-5 md:p-6">
             <div className="w-full lg:flex-1 flex flex-col gap-1.5">
               <label className="text-[10px] font-extrabold uppercase tracking-widest text-[#0b1c3e]">Destination / Theme</label>
-              <DestinationAutocomplete value={destination} onChange={setDestination} />
+              <DestinationAutocomplete value={destination} onChange={setDestination} packages={packages} />
             </div>
 
             <div className="w-full lg:w-[240px] flex flex-col gap-1.5">
