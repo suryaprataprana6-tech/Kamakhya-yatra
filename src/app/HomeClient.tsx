@@ -9,7 +9,8 @@ import AIAssistant from "@/components/AIAssistant";
 import { packagesData } from "@/data/packages";
 import { 
   ShieldCheck, Headphones, ThumbsUp, Map as MapIcon, 
-  CalendarCheck, UserCheck, Camera, Award, Heart, Star
+  CalendarCheck, UserCheck, Camera, Award, Heart, Star,
+  XCircle, FileText
 } from "lucide-react";
 import Image from "next/image";
 import { submitLeadAndRedirect } from "@/utils/leads";
@@ -585,6 +586,44 @@ export default function HomeClient({ initialPackages }: { initialPackages: any[]
                 {isBooking ? "Submitting..." : "Request Call Back"}
               </button>
             </form>
+          </div>
+        </div>
+      </section>
+
+      {/* 11.5 Cancel Booking / Refund Request Section */}
+      <section className="bg-[#0b1c3e] border-t border-[#d4af37]/30 text-white py-16 px-6 relative overflow-hidden">
+        {/* Subtle decorative glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[#d4af37]/5 rounded-full blur-[100px] pointer-events-none" />
+        
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <div className="inline-flex items-center justify-center p-3.5 rounded-full bg-[#d4af37]/10 border border-[#d4af37]/30 mb-6 text-[#d4af37]">
+            <XCircle className="w-8 h-8" />
+          </div>
+          
+          <h2 className="font-heading text-3xl md:text-4xl font-extrabold tracking-tight mb-4 text-white">
+            Need to Cancel Your Booking?
+          </h2>
+          
+          <p className="text-slate-300 max-w-2xl mx-auto text-base md:text-lg mb-8 leading-relaxed">
+            Submit your cancellation request online. Our support team will review it as per the Refund Policy and contact you within 24–72 hours.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a 
+              href="/cancel-booking"
+              className="w-full sm:w-auto px-8 py-4 rounded-full bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-600 text-[#0b1c3e] font-extrabold shadow-lg hover:shadow-[0_8px_24px_rgba(212,175,55,0.3)] hover:scale-[1.02] transition-all duration-200 text-center flex items-center justify-center gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Cancel Booking</span>
+            </a>
+            
+            <a 
+              href="/refund-policy"
+              className="w-full sm:w-auto px-8 py-4 rounded-full border border-white/20 hover:border-white/40 bg-white/5 hover:bg-white/10 font-bold transition-all duration-200 text-center flex items-center justify-center gap-2 text-white"
+            >
+              <FileText className="w-4 h-4 text-[#d4af37]" />
+              <span>View Refund Policy</span>
+            </a>
           </div>
         </div>
       </section>
