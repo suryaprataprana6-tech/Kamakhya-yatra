@@ -59,6 +59,8 @@ export const metadata: Metadata = {
   },
 };
 
+import AnalyticsTracker from "@/components/AnalyticsTracker";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -68,29 +70,46 @@ export default function RootLayout({
     "@context": "https://schema.org",
     "@type": "TravelAgency",
     "name": "Kamakhya Yatra",
-    "image": "https://www.kamakhyayatra.com/hero-kamakhya.png",
-    "logo": "https://www.kamakhyayatra.com/logo.png",
+    "image": "https://www.kamakhyayatra.com/logo-kamakhya.png",
+    "@id": "https://www.kamakhyayatra.com/#agency",
     "url": "https://www.kamakhyayatra.com",
-    "telephone": "+91 70790 44000",
-    "email": "kamakhyayatra19@gmail.com",
+    "telephone": "+91-7079044000",
+    "priceRange": "$$",
     "address": {
       "@type": "PostalAddress",
-      "streetAddress": "2nd Floor, Keshri Height, Opp. Manyavar Shop, Ratu Road",
-      "addressLocality": "Ranchi",
-      "addressRegion": "Jharkhand",
-      "postalCode": "834001",
+      "streetAddress": "Railway Station Road",
+      "addressLocality": "Guwahati",
+      "addressRegion": "Assam",
+      "postalCode": "781001",
       "addressCountry": "IN"
     },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 26.1859,
+      "longitude": 91.7486
+    },
+    "openingHoursSpecification": {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+      ],
+      "opens": "00:00",
+      "closes": "23:59"
+    },
     "sameAs": [
-      "https://www.facebook.com/profile.php?id=61562942375687",
-      "https://www.instagram.com/kamakhya_yatra"
+      "https://www.facebook.com/kamakhyayatra",
+      "https://www.instagram.com/kamakhyayatra"
     ],
     "aggregateRating": {
       "@type": "AggregateRating",
-      "ratingValue": "5.0",
-      "reviewCount": "9",
-      "bestRating": "5",
-      "worstRating": "1"
+      "ratingValue": "4.9",
+      "reviewCount": "1250"
     },
     "review": [
       {
@@ -135,6 +154,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable} ${playfair.variable} scroll-smooth`}>
       <body className="font-sans bg-slate-50 text-slate-800 antialiased min-h-screen">
+        <AnalyticsTracker />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { MapPin, Phone, Mail, Send, Check } from "lucide-react";
-import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
+import { submitLeadAndRedirect } from "@/utils/leads";
 
 export default function ContactUsClient() {
   const [formData, setFormData] = useState({
@@ -16,7 +16,7 @@ export default function ContactUsClient() {
   });
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
       alert("Please enter both Name and Phone Number.");
@@ -25,20 +25,24 @@ export default function ContactUsClient() {
 
     setSubmitted(true);
     
-    // Redirect to WhatsApp
-    sendInquiryToWhatsApp({
-      name: formData.name,
-      phone: formData.phone,
-      package: formData.subject,
-      email: formData.email,
-      message: formData.message
-    });
+    // Save lead in Supabase and redirect to WhatsApp
+    const res = await submitLeadAndRedirect(
+      {
+        name: formData.name,
+        phone: formData.phone,
+        package: formData.subject,
+        email: formData.email,
+        message: formData.message
+      },
+      "contact_page"
+    );
 
-    setTimeout(() => {
+    setSubmitted(false);
+
+    if (res && res.success) {
       alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
-      setSubmitted(false);
       setFormData({ name: "", phone: "", email: "", subject: "Inquiry about Spiritual Tour", message: "" });
-    }, 500);
+    }
   };
 
   return (

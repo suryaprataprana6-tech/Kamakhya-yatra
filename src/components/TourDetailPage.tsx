@@ -6,7 +6,7 @@ import { getPackageBySlug, Package } from "../data/packages";
 import { Check, Clock, MapPin, Star, IndianRupee, MessageCircle, Phone, ArrowLeft, Send } from "lucide-react";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
-import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
+import { submitLeadAndRedirect, recordWhatsAppClick } from "@/utils/leads";
 
 export default function TourDetailPage({ tour: initialTour }: { tour?: Package }) {
   const params = useParams();
@@ -43,13 +43,16 @@ export default function TourDetailPage({ tour: initialTour }: { tour?: Package }
     );
   }
 
-  const handleWhatsAppInquiry = () => {
+  const handleWhatsAppInquiry = async () => {
+    // Record WhatsApp button click lead
+    await recordWhatsAppClick(tour.title);
+    
     const text = `Hello Kamakhya Yatra, I am interested in booking the "${tour.title}" (${tour.duration}) package. Please share details.`;
     const url = `https://wa.me/917079044000?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bookingForm.name.trim() || !bookingForm.phone.trim()) {
       alert("Please fill in your name and phone number.");
@@ -58,19 +61,23 @@ export default function TourDetailPage({ tour: initialTour }: { tour?: Package }
 
     setIsSubmitting(true);
 
-    // Redirect to WhatsApp
-    sendInquiryToWhatsApp({
-      name: bookingForm.name,
-      phone: bookingForm.phone,
-      package: tour.title,
-      date: bookingForm.date
-    });
+    // Save lead in Supabase and redirect to WhatsApp
+    const res = await submitLeadAndRedirect(
+      {
+        name: bookingForm.name,
+        phone: bookingForm.phone,
+        package: tour.title,
+        date: bookingForm.date
+      },
+      "package_page"
+    );
 
-    setTimeout(() => {
+    setIsSubmitting(false);
+
+    if (res && res.success) {
       alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
-      setIsSubmitting(false);
       setBookingForm({ name: "", phone: "", date: "" });
-    }, 500);
+    }
   };
 
   return (

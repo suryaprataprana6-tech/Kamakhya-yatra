@@ -184,6 +184,7 @@ export default function Footer() {
             <li><Link href="/about-us" className="hover:text-[#d4af37] transition">About Us</Link></li>
             <li><Link href="/contact-us" className="hover:text-[#d4af37] transition">Contact Us</Link></li>
             <li><Link href="/refund-policy" className="hover:text-[#d4af37] transition">Refund Policy</Link></li>
+            <li><Link href="/cancel-booking" className="hover:text-[#d4af37] transition">Cancel Booking</Link></li>
             <li><Link href="/terms-conditions" className="hover:text-[#d4af37] transition">Terms & Conditions</Link></li>
             <li><Link href="/privacy-policy" className="hover:text-[#d4af37] transition">Privacy Policy</Link></li>
           </ul>
@@ -215,6 +216,7 @@ export default function Footer() {
           <Link href="/privacy-policy" className="hover:underline">Privacy</Link>
           <Link href="/terms-conditions" className="hover:underline">Terms</Link>
           <Link href="/refund-policy" className="hover:underline">Refunds</Link>
+          <Link href="/cancel-booking" className="hover:underline">Cancellation</Link>
         </div>
       </div>
     </footer>

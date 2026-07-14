@@ -6,7 +6,7 @@ import { packagesData } from "@/data/packages";
 import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
+import { submitLeadAndRedirect } from "@/utils/leads";
 
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
@@ -38,7 +38,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     }
   }, [slugParam]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
       alert("Please fill in your name and phone number.");
@@ -47,20 +47,24 @@ function BookingFormContent({ packages }: { packages: any[] }) {
 
     setIsSubmitting(true);
 
-    // Redirect to WhatsApp
-    sendInquiryToWhatsApp({
-      name: formData.name,
-      phone: formData.phone,
-      package: formData.package,
-      date: formData.date,
-      guests: formData.guests,
-      email: formData.email,
-      message: formData.message
-    });
+    // Save lead in Supabase and redirect to WhatsApp
+    const res = await submitLeadAndRedirect(
+      {
+        name: formData.name,
+        phone: formData.phone,
+        package: formData.package,
+        date: formData.date,
+        guests: formData.guests,
+        email: formData.email,
+        message: formData.message
+      },
+      "booking_page"
+    );
 
-    setTimeout(() => {
+    setIsSubmitting(false);
+
+    if (res && res.success) {
       alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
-      setIsSubmitting(false);
       setFormData({
         name: "",
         phone: "",
@@ -71,7 +75,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
         message: ""
       });
       router.push("/");
-    }, 500);
+    }
   };
 
   return (

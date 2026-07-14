@@ -12,7 +12,7 @@ import {
   CalendarCheck, UserCheck, Camera, Award, Heart, Star
 } from "lucide-react";
 import Image from "next/image";
-import { sendInquiryToWhatsApp } from "@/utils/whatsapp";
+import { submitLeadAndRedirect } from "@/utils/leads";
 import { googleReviewsData } from "@/data/reviews";
 
 export default function HomeClient({ initialPackages }: { initialPackages: any[] }) {
@@ -39,7 +39,7 @@ export default function HomeClient({ initialPackages }: { initialPackages: any[]
     return initialPackages.filter(p => p.category === "International").slice(0, 3);
   }, [initialPackages]);
 
-  const handleBookTour = (e: React.FormEvent) => {
+  const handleBookTour = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bookingData.name.trim() || !bookingData.phone.trim()) {
       alert("Please fill in your name and phone number.");
@@ -48,20 +48,23 @@ export default function HomeClient({ initialPackages }: { initialPackages: any[]
 
     setIsBooking(true);
     
-    // Redirect to WhatsApp
-    sendInquiryToWhatsApp({
-      name: bookingData.name,
-      phone: bookingData.phone,
-      package: bookingData.package,
-      date: bookingData.date
-    });
+    // Save lead in Supabase and redirect to WhatsApp
+    const res = await submitLeadAndRedirect(
+      {
+        name: bookingData.name,
+        phone: bookingData.phone,
+        package: bookingData.package,
+        date: bookingData.date
+      },
+      "homepage"
+    );
 
-    // Reset and feedback
-    setTimeout(() => {
+    setIsBooking(false);
+
+    if (res && res.success) {
       alert("Redirecting to WhatsApp to send your inquiry... Please click 'Send' in the WhatsApp chat.");
-      setIsBooking(false);
       setBookingData({ name: "", phone: "", package: "Amarnath Yatra", date: "" });
-    }, 500);
+    }
   };
 
 
