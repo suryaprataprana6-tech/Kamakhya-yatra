@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw } from "lucide-react";
+import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { logoutAdmin, deletePackage } from "./actions";
@@ -21,7 +21,7 @@ interface AnalyticsData {
 
 export default function AdminDashboardClient({ initialPackages }: AdminDashboardClientProps) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "leads">("packages");
+  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "leads" | "cancellations">("packages");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -35,7 +35,23 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
 
+  // Cancellations management states
+  const [cancellations, setCancellations] = useState<any[]>([]);
+  const [loadingCancellations, setLoadingCancellations] = useState(true);
+  const [isRefreshingCancellations, setIsRefreshingCancellations] = useState(false);
+  const [cancellationsSearch, setCancellationsSearch] = useState("");
+  const [cancellationStatusFilter, setCancellationStatusFilter] = useState("all");
+  const [cancellationRefundStatusFilter, setCancellationRefundStatusFilter] = useState("all");
+  const [savingNotesId, setSavingNotesId] = useState<number | null>(null);
+  const [cancellationsNotes, setCancellationsNotes] = useState<Record<number, string>>({});
+
   const router = useRouter();
+
+  const getWhatsAppLink = (phone: string, text: string) => {
+    const cleaned = phone.replace(/\D/g, "");
+    const dialCode = cleaned.length === 10 ? `91${cleaned}` : cleaned;
+    return `https://wa.me/${dialCode}?text=${encodeURIComponent(text)}`;
+  };
 
   const filtered = useMemo(() => {
     return initialPackages.filter(p =>
@@ -99,6 +115,182 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
     } catch (err) {
       console.error(err);
       alert("Error updating status.");
+    }
+  };
+
+  // Fetch cancellations data
+  const fetchCancellations = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshingCancellations(true);
+    try {
+      const { getCancellationsData } = await import("./actions");
+      const res = await getCancellationsData();
+      if (res.success && res.data) {
+        setCancellations(res.data);
+        // Initialize admin notes dictionary
+        const notesDict: Record<number, string> = {};
+        res.data.forEach((c: any) => {
+          notesDict[c.id] = c.admin_notes || "";
+        });
+        setCancellationsNotes(notesDict);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cancellations:", err);
+    } finally {
+      setLoadingCancellations(false);
+      if (showSpinner) setIsRefreshingCancellations(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "cancellations") {
+      fetchCancellations(false);
+    }
+  }, [activeTab]);
+
+  const filteredCancellations = useMemo(() => {
+    return cancellations.filter(c => {
+      const matchesSearch = 
+        c.booking_id.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
+        c.customer_name.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
+        c.phone.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
+        c.email.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
+        c.package_name.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
+        (c.cancellation_reason && c.cancellation_reason.toLowerCase().includes(cancellationsSearch.toLowerCase()));
+      
+      const matchesStatus = cancellationStatusFilter === "all" || c.status === cancellationStatusFilter;
+      const matchesRefundStatus = cancellationRefundStatusFilter === "all" || c.refund_status === cancellationRefundStatusFilter;
+      
+      return matchesSearch && matchesStatus && matchesRefundStatus;
+    });
+  }, [cancellations, cancellationsSearch, cancellationStatusFilter, cancellationRefundStatusFilter]);
+
+  const handleCancellationStatusChange = async (cancellationId: number, newStatus: string) => {
+    try {
+      const { updateCancellationStatus } = await import("./actions");
+      const res = await updateCancellationStatus(cancellationId, newStatus);
+      if (res.success) {
+        setCancellations(prev => prev.map(c => c.id === cancellationId ? { ...c, status: newStatus } : c));
+        alert("Cancellation status updated successfully. Notification email sent to customer.");
+        fetchCancellations(false);
+      } else {
+        alert("Failed to update status: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating status.");
+    }
+  };
+
+  const handleCancellationRefundStatusChange = async (cancellationId: number, newRefundStatus: string) => {
+    try {
+      const { updateCancellationRefundStatus } = await import("./actions");
+      const res = await updateCancellationRefundStatus(cancellationId, newRefundStatus);
+      if (res.success) {
+        setCancellations(prev => prev.map(c => c.id === cancellationId ? { ...c, refund_status: newRefundStatus } : c));
+        alert("Refund status updated successfully. Notification email sent to customer.");
+        fetchCancellations(false);
+      } else {
+        alert("Failed to update refund status: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating refund status.");
+    }
+  };
+
+  const handleSaveNotes = async (cancellationId: number) => {
+    setSavingNotesId(cancellationId);
+    try {
+      const { updateCancellationAdminNotes } = await import("./actions");
+      const notesText = cancellationsNotes[cancellationId] || "";
+      const res = await updateCancellationAdminNotes(cancellationId, notesText);
+      if (res.success) {
+        setCancellations(prev => prev.map(c => c.id === cancellationId ? { ...c, admin_notes: notesText } : c));
+        alert("Admin notes saved successfully.");
+      } else {
+        alert("Failed to save admin notes: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving admin notes.");
+    } finally {
+      setSavingNotesId(null);
+    }
+  };
+
+  const handleExportCancellationsCSV = () => {
+    if (filteredCancellations.length === 0) {
+      alert("No cancellations available to export.");
+      return;
+    }
+    const headers = [
+      "ID", "Booking ID", "Customer Name", "Phone", "Email", "Package Name", 
+      "Travel Date", "Cancellation Reason", "Refund Policy Accepted", 
+      "Status", "Refund Status", "Admin Notes", "Submitted At"
+    ];
+    const rows = filteredCancellations.map(c => [
+      c.id,
+      `"${c.booking_id}"`,
+      `"${(c.customer_name || '').replace(/"/g, '""')}"`,
+      `"${(c.phone || '')}"`,
+      `"${(c.email || '').replace(/"/g, '""')}"`,
+      `"${(c.package_name || '').replace(/"/g, '""')}"`,
+      `"${(c.travel_date || '')}"`,
+      `"${(c.cancellation_reason || '').replace(/\n/g, ' ').replace(/"/g, '""')}"`,
+      c.refund_policy_accepted ? "YES" : "NO",
+      c.status || "Pending",
+      c.refund_status || "Eligible",
+      `"${(c.admin_notes || '').replace(/\n/g, ' ').replace(/"/g, '""')}"`,
+      new Date(c.created_at).toLocaleString('en-IN')
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `cancellations_export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportCancellationsExcel = async () => {
+    if (filteredCancellations.length === 0) {
+      alert("No cancellations available to export.");
+      return;
+    }
+    try {
+      const XLSX = await import("xlsx");
+      const dataToExport = filteredCancellations.map(c => ({
+        "ID": c.id,
+        "Booking ID": c.booking_id,
+        "Customer Name": c.customer_name,
+        "Phone Number": c.phone,
+        "Email Address": c.email,
+        "Package Name": c.package_name,
+        "Travel Date": c.travel_date,
+        "Cancellation Reason": c.cancellation_reason,
+        "Refund Policy Accepted": c.refund_policy_accepted ? "Yes" : "No",
+        "Status": c.status || "Pending",
+        "Refund Status": c.refund_status || "Eligible",
+        "Admin Notes": c.admin_notes || "",
+        "Date Submitted": new Date(c.created_at).toLocaleString('en-IN')
+      }));
+      
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Booking Cancellations");
+
+      const maxColWidth = Object.keys(dataToExport[0] || {}).map(key => ({
+        wch: Math.max(key.length, ...dataToExport.map(row => String(row[key as keyof typeof row] || '').length)) + 2
+      }));
+      ws['!cols'] = maxColWidth;
+      
+      XLSX.writeFile(wb, `cancellations_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (err) {
+      console.error("Excel export error:", err);
+      alert("Failed to export to Excel. Exporting to CSV instead.");
+      handleExportCancellationsCSV();
     }
   };
 
@@ -299,6 +491,14 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
               }`}
             >
               Leads
+            </button>
+            <button
+              onClick={() => setActiveTab("cancellations")}
+              className={`pb-3 font-extrabold text-sm uppercase tracking-wider transition duration-150 border-b-2 ${
+                activeTab === "cancellations" ? "border-[#d4af37] text-white" : "border-transparent text-white/50 hover:text-white"
+              }`}
+            >
+              Cancellations
             </button>
           </div>
         </div>
@@ -522,7 +722,7 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                 </>
               )}
             </div>
-          ) : (
+          ) : activeTab === "leads" ? (
             <div className="flex flex-col gap-8">
               {loadingLeads ? (
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
@@ -652,7 +852,26 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                 <td className="p-4">
                                   <div className="flex flex-col gap-1">
                                     <span className="font-extrabold text-slate-800 text-sm">{lead.name}</span>
-                                    <span className="text-slate-500 font-semibold">📞 {lead.phone}</span>
+                                    <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
+                                      <span>📞 {lead.phone}</span>
+                                      {lead.phone && lead.phone !== "whatsapp" && (
+                                        <a
+                                          href={getWhatsAppLink(
+                                            lead.phone,
+                                            `Namaste ${lead.name},\n\nThis is Kamakhya Yatra support. Thank you for your inquiry regarding the ${lead.package || 'tour'} package. How can we assist you today?`
+                                          )}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-emerald-500 hover:text-emerald-600 inline-flex items-center"
+                                          title="Chat on WhatsApp"
+                                        >
+                                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.835-4.577c1.59.943 3.12 1.442 4.902 1.443 5.485.002 9.948-4.463 9.95-9.953.002-2.66-1.033-5.161-2.91-7.04C16.956 1.993 14.45 .958 11.787.958 6.302.958 1.838 5.423 1.836 10.91c-.001 1.889.499 3.486 1.446 4.975L2.29 19.95l4.602-1.207z"/>
+                                            <path d="M16.514 13.56c-.274-.137-1.62-.8-1.87-.892-.25-.09-.433-.135-.615.14-.18.27-.7.89-.858 1.07-.158.18-.316.2-.59.06-.273-.137-1.155-.425-2.2-1.357-.813-.725-1.36-1.62-1.52-1.9-.16-.273-.017-.42.12-.556.124-.122.274-.32.41-.48.136-.16.182-.27.272-.45.09-.18.046-.338-.022-.475-.068-.137-.615-1.48-.842-2.03-.22-.53-.443-.457-.61-.465-.162-.008-.347-.01-.532-.01-.185 0-.486.07-.74.35-.254.28-.97.95-.97 2.316s.99 2.68 1.13 2.87c.14.188 1.947 2.974 4.717 4.17 1.58.685 2.503.743 3.398.61.854-.128 2.63-1.075 3.002-2.062.372-.987.372-1.834.26-2.013-.11-.18-.323-.27-.597-.406z"/>
+                                          </svg>
+                                        </a>
+                                      )}
+                                    </div>
                                     {lead.email && <span className="text-slate-400 text-[11px]">{lead.email}</span>}
                                   </div>
                                 </td>
@@ -733,6 +952,288 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                             <tr>
                               <td colSpan={6} className="text-center py-16 text-slate-400 font-bold">
                                 No leads match your filters.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8">
+              {loadingCancellations ? (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-slate-200 border-t-[#0b1c3e] rounded-full mx-auto mb-4" />
+                  <p className="text-xs text-slate-400 font-bold">Loading cancellation requests...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Requests</span>
+                      <span className="text-2xl font-black text-[#0b1c3e] mt-1">{cancellations.length}</span>
+                    </div>
+                    <div className="bg-amber-50/40 p-5 rounded-2xl border border-amber-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Pending Review</span>
+                      <span className="text-2xl font-black text-amber-700 mt-1">
+                        {cancellations.filter(c => c.status === "Pending" || c.status === "Under Review").length}
+                      </span>
+                    </div>
+                    <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Approved Requests</span>
+                      <span className="text-2xl font-black text-emerald-700 mt-1">
+                        {cancellations.filter(c => c.status === "Approved" || c.status === "Completed").length}
+                      </span>
+                    </div>
+                    <div className="bg-blue-50/40 p-5 rounded-2xl border border-blue-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Refund Processed</span>
+                      <span className="text-2xl font-black text-blue-700 mt-1">
+                        {cancellations.filter(c => c.refund_status === "Refund Processed").length}
+                      </span>
+                    </div>
+                    <div className="bg-rose-50/40 p-5 rounded-2xl border border-rose-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Rejected Requests</span>
+                      <span className="text-2xl font-black text-rose-700 mt-1">
+                        {cancellations.filter(c => c.status === "Rejected").length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Controls Bar */}
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                      <div className="relative w-full sm:w-[240px]">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          placeholder="Search cancellations by Booking ID, customer..."
+                          value={cancellationsSearch}
+                          onChange={(e) => setCancellationsSearch(e.target.value)}
+                          className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-xs bg-slate-50/50"
+                        />
+                      </div>
+                      
+                      {/* Cancellation status filter */}
+                      <select
+                        value={cancellationStatusFilter}
+                        onChange={(e) => setCancellationStatusFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Request Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Under Review">Under Review</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+
+                      {/* Refund status filter */}
+                      <select
+                        value={cancellationRefundStatusFilter}
+                        onChange={(e) => setCancellationRefundStatusFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Refund Statuses</option>
+                        <option value="Eligible">Eligible</option>
+                        <option value="Not Eligible">Not Eligible</option>
+                        <option value="Refund Initiated">Refund Initiated</option>
+                        <option value="Refund Processed">Refund Processed</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                      <button
+                        onClick={handleExportCancellationsCSV}
+                        className="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                      >
+                        Export CSV
+                      </button>
+                      <button
+                        onClick={handleExportCancellationsExcel}
+                        className="inline-flex items-center gap-1.5 bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#b8952d] border border-[#d4af37]/35 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                      >
+                        Export Excel
+                      </button>
+                      <button
+                        onClick={() => fetchCancellations(true)}
+                        disabled={isRefreshingCancellations}
+                        className="inline-flex items-center justify-center w-10 h-10 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 text-slate-500 rounded-xl border border-slate-200 transition"
+                        title="Refresh cancellations"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshingCancellations ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cancellations Table */}
+                  <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
+                            <th className="p-4 w-28">Booking ID</th>
+                            <th className="p-4">Customer Info</th>
+                            <th className="p-4">Package details</th>
+                            <th className="p-4 w-[28%]">Reason & Notes</th>
+                            <th className="p-4 text-center">Status</th>
+                            <th className="p-4 text-center">Refund</th>
+                            <th className="p-4 text-right">Submitted</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {filteredCancellations.length > 0 ? (
+                            filteredCancellations.map((c) => (
+                              <tr key={c.id} className="hover:bg-slate-50/30 transition align-top">
+                                {/* Booking ID */}
+                                <td className="p-4 font-bold text-[#0b1c3e]">
+                                  {c.booking_id}
+                                </td>
+                                {/* Customer Info */}
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-extrabold text-slate-800 text-sm">{c.customer_name}</span>
+                                    <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
+                                      <span>📞 {c.phone}</span>
+                                      {c.phone && (
+                                        <a
+                                          href={getWhatsAppLink(
+                                            c.phone,
+                                            `Namaste ${c.customer_name},\n\nThis is Kamakhya Yatra support. Regarding your booking cancellation request for Booking ID ${c.booking_id} (${c.package_name}). We are processing your request. Please let us know if you have any questions.`
+                                          )}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-emerald-500 hover:text-emerald-600 inline-flex items-center"
+                                          title="Chat on WhatsApp"
+                                        >
+                                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.835-4.577c1.59.943 3.12 1.442 4.902 1.443 5.485.002 9.948-4.463 9.95-9.953.002-2.66-1.033-5.161-2.91-7.04C16.956 1.993 14.45 .958 11.787.958 6.302.958 1.838 5.423 1.836 10.91c-.001 1.889.499 3.486 1.446 4.975L2.29 19.95l4.602-1.207z"/>
+                                            <path d="M16.514 13.56c-.274-.137-1.62-.8-1.87-.892-.25-.09-.433-.135-.615.14-.18.27-.7.89-.858 1.07-.158.18-.316.2-.59.06-.273-.137-1.155-.425-2.2-1.357-.813-.725-1.36-1.62-1.52-1.9-.16-.273-.017-.42.12-.556.124-.122.274-.32.41-.48.136-.16.182-.27.272-.45.09-.18.046-.338-.022-.475-.068-.137-.615-1.48-.842-2.03-.22-.53-.443-.457-.61-.465-.162-.008-.347-.01-.532-.01-.185 0-.486.07-.74.35-.254.28-.97.95-.97 2.316s.99 2.68 1.13 2.87c.14.188 1.947 2.974 4.717 4.17 1.58.685 2.503.743 3.398.61.854-.128 2.63-1.075 3.002-2.062.372-.987.372-1.834.26-2.013-.11-.18-.323-.27-.597-.406z"/>
+                                          </svg>
+                                        </a>
+                                      )}
+                                    </div>
+                                    <span className="text-slate-400 text-[11px]">{c.email}</span>
+                                  </div>
+                                </td>
+                                {/* Package Details */}
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-semibold text-slate-700">{c.package_name}</span>
+                                    <span className="text-slate-500 font-bold text-[10px] uppercase">📅 Travel: {c.travel_date}</span>
+                                    {c.refund_policy_accepted && (
+                                      <span className="inline-flex items-center gap-0.5 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 font-bold px-1.5 py-0.5 rounded self-start mt-1">
+                                        <Check className="w-2.5 h-2.5" /> Policy Accepted
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                {/* Reason & Admin Notes */}
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-3">
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Reason:</span>
+                                      <p className="text-slate-600 leading-normal mt-0.5">
+                                        "{c.cancellation_reason}"
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                      <label htmlFor={`notes-${c.id}`} className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+                                        <span>Admin Notes:</span>
+                                        {c.admin_notes !== (cancellationsNotes[c.id] || "") && (
+                                          <span className="text-[9px] text-amber-500 font-extrabold uppercase">Unsaved Changes</span>
+                                        )}
+                                      </label>
+                                      <div className="flex gap-1.5 items-end">
+                                        <textarea
+                                          id={`notes-${c.id}`}
+                                          rows={2}
+                                          value={cancellationsNotes[c.id] || ""}
+                                          onChange={(e) => setCancellationsNotes({ ...cancellationsNotes, [c.id]: e.target.value })}
+                                          placeholder="Add private admin follow-up notes here..."
+                                          className="flex-1 p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:bg-white focus:border-[#0b1c3e] transition resize-none"
+                                        />
+                                        <button
+                                          onClick={() => handleSaveNotes(c.id)}
+                                          disabled={savingNotesId === c.id || c.admin_notes === (cancellationsNotes[c.id] || "")}
+                                          className="p-2.5 bg-[#0b1c3e] hover:bg-[#1e3c72] text-white disabled:opacity-30 rounded-lg transition"
+                                          title="Save Notes"
+                                        >
+                                          {savingNotesId === c.id ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                          ) : (
+                                            <Save className="w-4 h-4" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                {/* Status */}
+                                <td className="p-4 text-center">
+                                  <select
+                                    value={c.status || 'Pending'}
+                                    onChange={(e) => handleCancellationStatusChange(c.id, e.target.value)}
+                                    className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer ${
+                                      c.status === "Pending"
+                                        ? "bg-amber-50 text-amber-600 border-amber-100"
+                                        : c.status === "Under Review"
+                                        ? "bg-blue-50 text-blue-600 border-blue-100"
+                                        : c.status === "Approved"
+                                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                        : c.status === "Rejected"
+                                        ? "bg-rose-50 text-rose-600 border-rose-100"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}
+                                  >
+                                    <option value="Pending">Pending</option>
+                                    <option value="Under Review">Under Review</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                    <option value="Completed">Completed</option>
+                                  </select>
+                                </td>
+                                {/* Refund Status */}
+                                <td className="p-4 text-center">
+                                  <select
+                                    value={c.refund_status || 'Eligible'}
+                                    onChange={(e) => handleCancellationRefundStatusChange(c.id, e.target.value)}
+                                    className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer ${
+                                      c.refund_status === "Eligible"
+                                        ? "bg-amber-50 text-amber-600 border-amber-100"
+                                        : c.refund_status === "Not Eligible"
+                                        ? "bg-rose-50 text-rose-600 border-rose-100"
+                                        : c.refund_status === "Refund Initiated"
+                                        ? "bg-blue-50 text-blue-600 border-blue-100"
+                                        : c.refund_status === "Refund Processed"
+                                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}
+                                  >
+                                    <option value="Eligible">Eligible</option>
+                                    <option value="Not Eligible">Not Eligible</option>
+                                    <option value="Refund Initiated">Refund Initiated</option>
+                                    <option value="Refund Processed">Refund Processed</option>
+                                  </select>
+                                </td>
+                                {/* Date Submitted */}
+                                <td className="p-4 text-right text-slate-400 font-medium">
+                                  {new Date(c.created_at).toLocaleString("en-IN", {
+                                    day: "numeric",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  })}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="text-center py-16 text-slate-400 font-bold">
+                                No cancellation requests match your filters.
                               </td>
                             </tr>
                           )}

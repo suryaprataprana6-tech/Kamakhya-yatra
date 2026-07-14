@@ -585,6 +585,13 @@ export async function updateCancellationStatus(id: number, status: string) {
   }
 
   try {
+    // 1. Fetch details for email
+    const { data: record, error: fetchError } = await supabaseServer
+      .from("booking_cancellations")
+      .select("customer_name, email, booking_id, package_name")
+      .eq("id", id)
+      .single();
+
     const { error } = await supabaseServer
       .from("booking_cancellations")
       .update({
@@ -596,6 +603,18 @@ export async function updateCancellationStatus(id: number, status: string) {
     if (error) {
       console.error("Error updating cancellation status:", error);
       return { success: false, error: error.message };
+    }
+
+    // 2. Send email notification asynchronously
+    if (record && !fetchError) {
+      sendCancellationEmailUpdate(
+        record.customer_name,
+        record.email,
+        record.booking_id,
+        record.package_name,
+        "status",
+        status
+      ).catch(e => console.error("Email update failed:", e));
     }
 
     return { success: true };
@@ -613,6 +632,13 @@ export async function updateCancellationRefundStatus(id: number, refundStatus: s
   }
 
   try {
+    // 1. Fetch details for email
+    const { data: record, error: fetchError } = await supabaseServer
+      .from("booking_cancellations")
+      .select("customer_name, email, booking_id, package_name")
+      .eq("id", id)
+      .single();
+
     const { error } = await supabaseServer
       .from("booking_cancellations")
       .update({
@@ -624,6 +650,18 @@ export async function updateCancellationRefundStatus(id: number, refundStatus: s
     if (error) {
       console.error("Error updating refund status:", error);
       return { success: false, error: error.message };
+    }
+
+    // 2. Send email notification asynchronously
+    if (record && !fetchError) {
+      sendCancellationEmailUpdate(
+        record.customer_name,
+        record.email,
+        record.booking_id,
+        record.package_name,
+        "refund",
+        refundStatus
+      ).catch(e => console.error("Email update failed:", e));
     }
 
     return { success: true };
@@ -658,6 +696,58 @@ export async function updateCancellationAdminNotes(id: number, notes: string) {
   } catch (err: any) {
     console.error("Error updating admin notes:", err);
     return { success: false, error: err.message };
+  }
+}
+
+async function sendCancellationEmailUpdate(
+  customerName: string,
+  email: string,
+  bookingId: string,
+  packageName: string,
+  updateType: "status" | "refund",
+  newValue: string
+) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    let subject = "";
+    let messageText = "";
+
+    if (updateType === "status") {
+      subject = `Booking Cancellation Update: Request ${newValue} - Booking ID ${bookingId}`;
+      messageText = `Namaste ${customerName},\n\nThis is an update regarding your booking cancellation request for Booking ID: ${bookingId} (Package: ${packageName}).\n\nThe status of your cancellation request has been updated to: ${newValue}.\n\nOur team is processing it according to our Refund Policy. If we need any further details, we will get in touch with you.\n\nThank you,\nKamakhya Yatra Team\nhttps://www.kamakhyayatra.com`;
+    } else {
+      subject = `Refund Status Update: ${newValue} - Booking ID ${bookingId}`;
+      messageText = `Namaste ${customerName},\n\nThis is an update regarding your refund for Booking ID: ${bookingId} (Package: ${packageName}).\n\nThe refund status has been updated to: ${newValue}.\n\n` +
+        (newValue === "Refund Processed" 
+          ? "The refund amount has been successfully processed and credited to your original payment source or the bank account provided. Please allow 3-7 business days for it to reflect in your statement."
+          : newValue === "Refund Initiated"
+          ? "Your refund transaction has been initiated. It is currently being processed by our banking channels."
+          : newValue === "Eligible"
+          ? "Your cancellation has been reviewed and marked as eligible for refund. The refund transaction will be initiated shortly."
+          : "We have reviewed your request, and per our policy guidelines, this booking is not eligible for refund.") +
+        `\n\nIf you have any questions, please contact our helpline at +91 70790 44000.\n\nThank you,\nKamakhya Yatra Team\nhttps://www.kamakhyayatra.com`;
+    }
+
+    const mailOptions = {
+      from: `"Kamakhya Yatra Team" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: email,
+      subject: subject,
+      text: messageText,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Email update notification sent to ${email} successfully.`);
+  } catch (err) {
+    console.error("Failed to send SMTP email update notification:", err);
   }
 }
 
