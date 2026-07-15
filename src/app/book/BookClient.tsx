@@ -10,7 +10,7 @@ import { submitBookingRequest, submitBookingPayment } from "@/app/admin/actions"
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const slugParam = searchParams.get("slug") || searchParams.get("dest");
+  const packageParam = searchParams.get("package") || searchParams.get("slug") || searchParams.get("dest");
 
   const [step, setStep] = useState(1); // 1: Details, 2: Payment, 3: Success
   const [bookingId, setBookingId] = useState<number | null>(null);
@@ -37,17 +37,17 @@ function BookingFormContent({ packages }: { packages: any[] }) {
   const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
-    if (slugParam) {
-      const match = packages.find(p => p.slug === slugParam || p.title.toLowerCase().includes(slugParam.toLowerCase()));
+    if (packageParam) {
+      const match = packages.find(p => p.slug === packageParam || p.title.toLowerCase().includes(packageParam.toLowerCase()));
       if (match) {
         setFormData(prev => ({ ...prev, package: match.title }));
       } else {
-        setFormData(prev => ({ ...prev, package: slugParam }));
+        setFormData(prev => ({ ...prev, package: packageParam }));
       }
     } else if (packages.length > 0) {
       setFormData(prev => ({ ...prev, package: prev.package?.trim() || packages[0].title }));
     }
-  }, [slugParam, packages]);
+  }, [packageParam, packages]);
 
   // Handle Step 1 details submission
   const handleDetailsSubmit = async (e: React.FormEvent) => {
@@ -174,6 +174,11 @@ function BookingFormContent({ packages }: { packages: any[] }) {
           <form onSubmit={handleDetailsSubmit} className="flex flex-col gap-6">
             <h2 className="text-2xl font-extrabold text-[#0b1c3e] mb-2">Configure Your Journey</h2>
             <p className="text-xs text-slate-400 mb-4">Provide travel specifications to generate your unique booking request record.</p>
+
+            <div className="bg-[#0b1c3e]/5 border border-[#0b1c3e]/10 p-4 rounded-xl flex justify-between items-center text-xs">
+              <span className="font-bold text-[#0b1c3e]">Advance Booking Amount:</span>
+              <strong className="text-sm font-extrabold text-[#d4af37]">₹5,000 (Advance token deposit)</strong>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">

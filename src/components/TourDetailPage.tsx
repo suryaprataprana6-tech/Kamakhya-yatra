@@ -190,8 +190,14 @@ export default function TourDetailPage({ tour: initialTour }: { tour?: Package }
                 <p className="text-[10px] text-slate-400 mt-2">All taxes, basic hotels & transportation included</p>
 
                 <div className="flex flex-col gap-3 mt-6">
+                  <button 
+                    onClick={() => router.push(`/book?package=${encodeURIComponent(tour.title)}`)} 
+                    className="w-full py-3.5 rounded-xl bg-[#0b1c3e] hover:bg-[#1e3c72] text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition"
+                  >
+                    Book Yatra Online
+                  </button>
                   <button onClick={handleWhatsAppInquiry} className="w-full py-3.5 rounded-xl bg-[#2ecc71] hover:bg-[#27ae60] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md transition">
-                    <MessageCircle className="w-4 h-4 fill-white" /> Chat on WhatsApp
+                    <MessageCircle className="w-4 h-4 fill-white" /> WhatsApp Inquiry
                   </button>
                   <a href="tel:+917079044000" className="w-full py-3.5 rounded-xl border-2 border-[#0b1c3e] text-[#0b1c3e] hover:bg-[#0b1c3e] hover:text-white font-bold text-sm flex items-center justify-center gap-2 transition">
                     <Phone className="w-4 h-4" /> Call Specialist

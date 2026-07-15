@@ -515,6 +515,26 @@ export async function submitCancellationRequest(data: {
       return { success: false, error: insertError.message };
     }
 
+    // Create admin notification
+    createAdminNotification(
+      "cancellation_request",
+      `Cancellation Request: ${data.bookingId.trim()}`,
+      `Cancellation request submitted by ${data.customerName.trim()} for package ${data.packageName.trim()}. Reason: ${data.cancellationReason.trim()}`,
+      "cancellations",
+      data.bookingId.trim()
+    ).catch(err => console.error("Failed to create admin cancellation notification:", err));
+
+    // Send admin notification email
+    sendAdminCancellationNotificationEmail({
+      bookingId: data.bookingId.trim(),
+      customerName: data.customerName.trim(),
+      phone: cleanedPhone,
+      email: data.email.trim(),
+      packageName: data.packageName.trim(),
+      travelDate: data.travelDate.trim(),
+      cancellationReason: data.cancellationReason.trim()
+    }).catch(err => console.error("Failed to send admin cancellation email:", err));
+
     // Send customer email notification via SMTP
     try {
       const transporter = nodemailer.createTransport({
@@ -782,6 +802,60 @@ export async function submitBookingRequest(data: {
       return { success: false, error: "Invalid mobile number. Must contain 10-15 digits." };
     }
 
+    // Check departure availability and allocate seats
+    const { data: departure } = await supabaseServer
+      .from("tour_departures")
+      .select("*")
+      .eq("package_name", data.packageName)
+      .eq("departure_date", data.travelDate)
+      .maybeSingle();
+
+    if (departure) {
+      if (departure.available_seats < data.numberOfTravellers) {
+        return { success: false, error: `Seats fully booked. Only ${departure.available_seats} seat(s) remaining for this date.` };
+      }
+      
+      const newBooked = departure.booked_seats + data.numberOfTravellers;
+      const newAvailable = departure.total_seats - newBooked;
+      const newStatus = newAvailable === 0 ? "Sold Out" : departure.status;
+      
+      const { error: depUpdateError } = await supabaseServer
+        .from("tour_departures")
+        .update({
+          booked_seats: newBooked,
+          available_seats: newAvailable,
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", departure.id);
+        
+      if (depUpdateError) {
+        console.error("Failed to update departure seats:", depUpdateError);
+        return { success: false, error: "Failed to allocate seats for this booking." };
+      }
+    } else {
+      // Auto-schedule default departure with 40 seats
+      const totalSeats = 40;
+      const bookedSeats = data.numberOfTravellers;
+      const availableSeats = totalSeats - bookedSeats;
+      
+      const { error: depInsertError } = await supabaseServer
+        .from("tour_departures")
+        .insert({
+          package_id: data.packageId || null,
+          package_name: data.packageName,
+          departure_date: data.travelDate,
+          total_seats: totalSeats,
+          booked_seats: bookedSeats,
+          available_seats: availableSeats,
+          status: availableSeats === 0 ? "Sold Out" : "Open"
+        });
+        
+      if (depInsertError) {
+        console.warn("Failed to auto-create tour departure:", depInsertError);
+      }
+    }
+
     // 2. Insert record
     const { data: record, error } = await supabaseServer
       .from("booking_requests")
@@ -811,6 +885,20 @@ export async function submitBookingRequest(data: {
       console.error("Database insert error:", error);
       return { success: false, error: error?.message || "Failed to create booking record." };
     }
+
+    // Create admin notification in database
+    createAdminNotification(
+      "new_booking",
+      `New Booking: ${record.booking_reference}`,
+      `New booking request submitted by ${record.customer_name} for ${record.package_name}.`,
+      "bookings",
+      record.booking_reference
+    ).catch(err => console.error("Failed to create admin booking notification:", err));
+
+    // Send admin notification email via SMTP
+    sendAdminBookingReceiptEmail(record).catch(err => {
+      console.error("Failed to send admin booking alert email:", err);
+    });
 
     // 3. Send receipt email via SMTP (asynchronous background task)
     sendBookingReceiptEmail(record).catch(err => {
@@ -900,6 +988,31 @@ export async function submitBookingPayment(
       return { success: false, error: "Failed to save payment details in database." };
     }
 
+    // Fetch full booking details for notifications
+    try {
+      const { data: bookingRecord } = await supabaseServer
+        .from("booking_requests")
+        .select("*")
+        .eq("id", bookingId)
+        .single();
+
+      if (bookingRecord) {
+        // Create database notification
+        await createAdminNotification(
+          "payment_upload",
+          `Payment Submitted: ${bookingRecord.booking_reference}`,
+          `Payment screenshot and Transaction ID (${transactionId}) uploaded by ${bookingRecord.customer_name}. Verification pending.`,
+          "bookings",
+          bookingRecord.booking_reference
+        );
+
+        // Send admin notification email
+        await sendAdminPaymentNotificationEmail(bookingRecord, transactionId, publicUrl);
+      }
+    } catch (notificationErr: any) {
+      console.error("Error processing admin payment notification:", notificationErr);
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("Payment details submission error:", err);
@@ -977,6 +1090,66 @@ export async function updateBookingStatus(id: number, status: string) {
       .select("*")
       .eq("id", id)
       .single();
+
+    if (fetchError || !record) {
+      return { success: false, error: "Booking request not found" };
+    }
+
+    // Release seats on departure if cancelled
+    if (status === "Cancelled" && record.booking_status !== "Cancelled") {
+      const { data: departure } = await supabaseServer
+        .from("tour_departures")
+        .select("*")
+        .eq("package_name", record.package_name)
+        .eq("departure_date", record.travel_date)
+        .maybeSingle();
+
+      if (departure) {
+        const newBooked = Math.max(0, departure.booked_seats - record.number_of_travellers);
+        const newAvailable = departure.total_seats - newBooked;
+        const newStatus = departure.status === "Sold Out" && newAvailable > 0 ? "Open" : departure.status;
+
+        await supabaseServer
+          .from("tour_departures")
+          .update({
+            booked_seats: newBooked,
+            available_seats: newAvailable,
+            status: newStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", departure.id);
+      }
+    }
+
+    // Re-allocate seats if restoring a cancelled booking
+    if (record.booking_status === "Cancelled" && status !== "Cancelled") {
+      const { data: departure } = await supabaseServer
+        .from("tour_departures")
+        .select("*")
+        .eq("package_name", record.package_name)
+        .eq("departure_date", record.travel_date)
+        .maybeSingle();
+
+      if (departure) {
+        if (departure.available_seats < record.number_of_travellers) {
+          return { success: false, error: `Cannot restore booking. Departure date is fully booked. Only ${departure.available_seats} seat(s) available.` };
+        }
+
+        const newBooked = departure.booked_seats + record.number_of_travellers;
+        const newAvailable = departure.total_seats - newBooked;
+        const newStatus = newAvailable === 0 ? "Sold Out" : departure.status;
+
+        await supabaseServer
+          .from("tour_departures")
+          .update({
+            booked_seats: newBooked,
+            available_seats: newAvailable,
+            status: newStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", departure.id);
+      }
+    }
 
     const { error } = await supabaseServer
       .from("booking_requests")
@@ -1231,6 +1404,571 @@ async function sendBookingStatusUpdateEmail(record: any, newStatus: string) {
     console.log(`SMTP update email sent successfully to ${record.email} (Status: ${newStatus})`);
   } catch (err) {
     console.error("Failed to send SMTP update email:", err);
+  }
+}
+
+// ==========================================
+// ADMIN NOTIFICATION SYSTEM ACTIONS
+// ==========================================
+
+export async function getNotifications() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { data, error } = await supabaseServer
+      .from("admin_notifications")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching notifications:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Error fetching notifications:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function markNotificationRead(id: number) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("admin_notifications")
+      .update({ is_read: true })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error marking notification read:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error marking notification read:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function markAllNotificationsRead() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("admin_notifications")
+      .update({ is_read: true })
+      .eq("is_read", false);
+
+    if (error) {
+      console.error("Error marking all notifications read:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error marking all notifications read:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function createAdminNotification(
+  type: string,
+  title: string,
+  message: string,
+  link: string,
+  referenceId?: string
+) {
+  try {
+    const { error } = await supabaseServer
+      .from("admin_notifications")
+      .insert({
+        type,
+        title,
+        message,
+        link,
+        is_read: false,
+        reference_id: referenceId || null
+      });
+
+    if (error) {
+      console.error("Error inserting notification:", error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error creating notification:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+// SMTP: send admin alert email for new booking request
+async function sendAdminBookingReceiptEmail(record: any) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const travelDateFormatted = new Date(record.travel_date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
+    });
+
+    const adminEmail = "kamakhyayatra19@gmail.com";
+    const mailOptions = {
+      from: `"KY Booking System" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: adminEmail,
+      subject: `🚨 [ADMIN ALERT] New Booking Submitted - Ref: ${record.booking_reference}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #0b1c3e; border-bottom: 2px solid #d4af37; padding-bottom: 10px; margin-top: 0;">New Booking Request Received</h2>
+          <p>A new tour booking request has been submitted by a client. Details below:</p>
+          
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e; width: 150px;">Booking Ref ID:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #d4af37;">${record.booking_reference}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Customer Name:</td>
+                <td style="padding: 6px 0;">${record.customer_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Phone Number:</td>
+                <td style="padding: 6px 0;">${record.phone}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Email Address:</td>
+                <td style="padding: 6px 0;">${record.email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Yatra Package:</td>
+                <td style="padding: 6px 0;">${record.package_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travel Date:</td>
+                <td style="padding: 6px 0;">${travelDateFormatted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Pilgrim Count:</td>
+                <td style="padding: 6px 0;">${record.number_of_travellers} travellers</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Boarding Point:</td>
+                <td style="padding: 6px 0;">${record.boarding_point}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Requirements:</td>
+                <td style="padding: 6px 0; color: #555; font-style: italic;">${record.special_requirements || "None"}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0 10px 0;">
+            <a href="https://www.kamakhyayatra.com/admin" style="background-color: #0b1c3e; color: #white; text-decoration: none; font-weight: bold; padding: 12px 30px; border-radius: 6px; display: inline-block;">
+              Open Admin Dashboard
+            </a>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`SMTP admin alert booking receipt email sent successfully to ${adminEmail}`);
+  } catch (err) {
+    console.error("Failed to send SMTP admin booking alert email:", err);
+  }
+}
+
+// SMTP: send admin alert email for payment verification upload
+async function sendAdminPaymentNotificationEmail(bookingRecord: any, transactionId: string, screenshotUrl: string) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const adminEmail = "kamakhyayatra19@gmail.com";
+    const mailOptions = {
+      from: `"KY Payment System" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: adminEmail,
+      subject: `💰 [ADMIN ALERT] Payment Uploaded - Ref: ${bookingRecord.booking_reference}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #0b1c3e; border-bottom: 2px solid #d4af37; padding-bottom: 10px; margin-top: 0;">Payment Screenshot Submitted</h2>
+          <p>A client has uploaded payment proof for their booking. Details below:</p>
+          
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e; width: 150px;">Booking Ref ID:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #d4af37;">${bookingRecord.booking_reference}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Customer Name:</td>
+                <td style="padding: 6px 0;">${bookingRecord.customer_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">UTR / Transaction ID:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">${transactionId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Advance Amount:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #27ae60;">₹${Number(bookingRecord.advance_amount || 5000.0).toLocaleString("en-IN")}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Screenshot Proof:</td>
+                <td style="padding: 6px 0;">
+                  <a href="${screenshotUrl}" target="_blank" style="color: #3182ce; font-weight: bold; text-decoration: underline;">
+                    View Uploaded Screenshot File
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0 10px 0;">
+            <a href="https://www.kamakhyayatra.com/admin" style="background-color: #0b1c3e; color: #white; text-decoration: none; font-weight: bold; padding: 12px 30px; border-radius: 6px; display: inline-block;">
+              Open Dashboard for Verification
+            </a>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`SMTP admin alert payment receipt email sent successfully to ${adminEmail}`);
+  } catch (err) {
+    console.error("Failed to send SMTP admin payment alert email:", err);
+  }
+}
+
+// SMTP: send admin alert email for cancellation request
+async function sendAdminCancellationNotificationEmail(data: any) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const adminEmail = "kamakhyayatra19@gmail.com";
+    const mailOptions = {
+      from: `"KY Cancellation System" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: adminEmail,
+      subject: `⚠️ [ADMIN ALERT] Booking Cancellation Request - Booking ID: ${data.bookingId}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #c53030; border-bottom: 2px solid #e53e3e; padding-bottom: 10px; margin-top: 0;">Cancellation Request Submitted</h2>
+          <p>A client has submitted a request to cancel their travel package booking. Details below:</p>
+          
+          <div style="background-color: #fffaf0; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #feebc8;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e; width: 150px;">Booking ID:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #c53030;">${data.bookingId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e;">Customer Name:</td>
+                <td style="padding: 6px 0;">${data.customerName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e;">Phone Number:</td>
+                <td style="padding: 6px 0;">${data.phone}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e;">Email Address:</td>
+                <td style="padding: 6px 0;">${data.email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e;">Yatra Package:</td>
+                <td style="padding: 6px 0;">${data.packageName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e;">Travel Date:</td>
+                <td style="padding: 6px 0;">${data.travelDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #7b341e; vertical-align: top;">Reason:</td>
+                <td style="padding: 6px 0; color: #742a2a; font-style: italic;">${data.cancellationReason}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0 10px 0;">
+            <a href="https://www.kamakhyayatra.com/admin" style="background-color: #c53030; color: #white; text-decoration: none; font-weight: bold; padding: 12px 30px; border-radius: 6px; display: inline-block;">
+              Open Admin cancellations Portal
+            </a>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`SMTP admin alert cancellation email sent successfully to ${adminEmail}`);
+  } catch (err) {
+    console.error("Failed to send SMTP admin cancellation email:", err);
+  }
+}
+
+// ==========================================
+// TOUR DEPARTURE MANAGEMENT ACTIONS
+// ==========================================
+
+export async function getDeparturesData() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    // 1. Fetch departures
+    const { data: departures, error: depError } = await supabaseServer
+      .from("tour_departures")
+      .select("*")
+      .order("departure_date", { ascending: true });
+
+    if (depError) {
+      console.error("Error fetching departures:", depError);
+      return { success: false, error: depError.message };
+    }
+
+    // 2. Fetch packages for the dropdown selection
+    const { data: packages, error: pkgError } = await supabaseServer
+      .from("packages")
+      .select("id, title")
+      .order("title", { ascending: true });
+
+    if (pkgError) {
+      console.error("Error fetching packages for departures dropdown:", pkgError);
+    }
+
+    // 3. Compute metrics
+    const totalDepartures = departures ? departures.length : 0;
+    const totalSeats = (departures || []).reduce((sum, d) => sum + d.total_seats, 0);
+    const bookedSeats = (departures || []).reduce((sum, d) => sum + d.booked_seats, 0);
+    const occupancyRate = totalSeats > 0 ? Math.round((bookedSeats / totalSeats) * 100) : 0;
+    const activeDepartures = (departures || []).filter(d => d.status === "Open" || d.status === "Guaranteed").length;
+    const soldOutDepartures = (departures || []).filter(d => d.status === "Sold Out" || d.available_seats === 0).length;
+
+    return {
+      success: true,
+      data: {
+        departures: departures || [],
+        packages: packages || [],
+        metrics: {
+          totalDepartures,
+          totalSeats,
+          bookedSeats,
+          occupancyRate,
+          activeDepartures,
+          soldOutDepartures
+        }
+      }
+    };
+  } catch (err: any) {
+    console.error("Error in getDeparturesData:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function createDeparture(data: {
+  packageId?: number;
+  packageName: string;
+  departureDate: string;
+  totalSeats: number;
+  status: string;
+}) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    // Check if unique constraint violated (already exists)
+    const { data: existing } = await supabaseServer
+      .from("tour_departures")
+      .select("id")
+      .eq("package_name", data.packageName)
+      .eq("departure_date", data.departureDate)
+      .maybeSingle();
+
+    if (existing) {
+      return { success: false, error: "A departure already exists for this package and date." };
+    }
+
+    // Insert record
+    const { error } = await supabaseServer
+      .from("tour_departures")
+      .insert({
+        package_id: data.packageId || null,
+        package_name: data.packageName,
+        departure_date: data.departureDate,
+        total_seats: data.totalSeats,
+        booked_seats: 0,
+        available_seats: data.totalSeats,
+        status: data.status || "Open"
+      });
+
+    if (error) {
+      console.error("Error creating departure:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in createDeparture:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateDeparture(
+  id: number,
+  data: {
+    totalSeats: number;
+    status: string;
+  }
+) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    // 1. Fetch current booked seats to make sure we don't reduce total_seats below booked_seats
+    const { data: current, error: fetchError } = await supabaseServer
+      .from("tour_departures")
+      .select("booked_seats")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !current) {
+      return { success: false, error: "Departure not found." };
+    }
+
+    if (data.totalSeats < current.booked_seats) {
+      return { success: false, error: `Cannot reduce total seats below booked seats (${current.booked_seats}).` };
+    }
+
+    const availableSeats = data.totalSeats - current.booked_seats;
+    const resolvedStatus = availableSeats === 0 ? "Sold Out" : data.status;
+
+    const { error } = await supabaseServer
+      .from("tour_departures")
+      .update({
+        total_seats: data.totalSeats,
+        available_seats: availableSeats,
+        status: resolvedStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating departure:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in updateDeparture:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteDeparture(id: number) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    // Check if there are booked seats
+    const { data: current } = await supabaseServer
+      .from("tour_departures")
+      .select("booked_seats")
+      .eq("id", id)
+      .single();
+
+    if (current && current.booked_seats > 0) {
+      return { success: false, error: "Cannot delete a departure that has bookings assigned." };
+    }
+
+    const { error } = await supabaseServer
+      .from("tour_departures")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error deleting departure:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteDeparture:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getDepartureBookings(packageName: string, departureDate: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { data, error } = await supabaseServer
+      .from("booking_requests")
+      .select("booking_reference, customer_name, phone, email, number_of_travellers, booking_status, payment_status, created_at")
+      .eq("package_name", packageName)
+      .eq("travel_date", departureDate)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching departure bookings:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Error in getDepartureBookings:", err);
+    return { success: false, error: err.message };
   }
 }
 

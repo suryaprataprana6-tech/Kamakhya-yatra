@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download } from "lucide-react";
+import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download, Bell, CreditCard, AlertTriangle, Calendar } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { logoutAdmin, deletePackage } from "./actions";
@@ -21,7 +21,7 @@ interface AnalyticsData {
 
 export default function AdminDashboardClient({ initialPackages }: AdminDashboardClientProps) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "bookings" | "leads" | "cancellations">("packages");
+  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "bookings" | "leads" | "cancellations" | "departures">("packages");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -58,6 +58,251 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
   const [cancellationsNotes, setCancellationsNotes] = useState<Record<number, string>>({});
 
   const router = useRouter();
+
+  // Notification Center states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+
+  const fetchNotifications = async () => {
+    try {
+      const { getNotifications } = await import("./actions");
+      const res = await getNotifications();
+      if (res.success && res.data) {
+        setNotifications(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000); // Check every 15s
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleMarkAsRead = async (id: number, link: string, referenceId?: string) => {
+    try {
+      const { markNotificationRead } = await import("./actions");
+      await markNotificationRead(id);
+      
+      // Update local state instantly
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      
+      // Redirect to the correct tab and filter
+      if (link === "bookings" && referenceId) {
+        setActiveTab("bookings");
+        setBookingsSearch(referenceId);
+      } else if (link === "cancellations" && referenceId) {
+        setActiveTab("cancellations");
+        setCancellationsSearch(referenceId);
+      } else if (link === "bookings") {
+        setActiveTab("bookings");
+      } else if (link === "cancellations") {
+        setActiveTab("cancellations");
+      }
+      
+      setShowNotifications(false);
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const { markAllNotificationsRead } = await import("./actions");
+      const res = await markAllNotificationsRead();
+      if (res.success) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      }
+    } catch (err) {
+      console.error("Failed to mark all notifications as read:", err);
+    }
+  };
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !n.is_read).length;
+  }, [notifications]);
+
+  const getRelativeTime = (dateString: string) => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
+
+  // Departures management states
+  const [departures, setDepartures] = useState<any[]>([]);
+  const [departuresPackages, setDeparturesPackages] = useState<any[]>([]);
+  const [departuresMetrics, setDeparturesMetrics] = useState<any | null>(null);
+  const [loadingDepartures, setLoadingDepartures] = useState(true);
+  const [isRefreshingDepartures, setIsRefreshingDepartures] = useState(false);
+  const [departuresSearch, setDeparturesSearch] = useState("");
+  const [departureStatusFilter, setDepartureStatusFilter] = useState("all");
+
+  // Create departure modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createDepPackage, setCreateDepPackage] = useState("");
+  const [createDepDate, setCreateDepDate] = useState("");
+  const [createDepTotalSeats, setCreateDepTotalSeats] = useState(40);
+  const [createDepStatus, setCreateDepStatus] = useState("Open");
+
+  // Edit departure modal states
+  const [showEditModal, setShowEditModal] = useState<any | null>(null);
+  const [editDepTotalSeats, setEditDepTotalSeats] = useState(40);
+  const [editDepStatus, setEditDepStatus] = useState("Open");
+
+  // Departure booking report modal states
+  const [selectedReportDep, setSelectedReportDep] = useState<any | null>(null);
+  const [reportBookings, setReportBookings] = useState<any[]>([]);
+  const [loadingReportBookings, setLoadingReportBookings] = useState(false);
+
+  const fetchDepartures = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshingDepartures(true);
+    try {
+      const { getDeparturesData } = await import("./actions");
+      const res = await getDeparturesData();
+      if (res.success && res.data) {
+        setDepartures(res.data.departures);
+        setDeparturesPackages(res.data.packages);
+        setDeparturesMetrics(res.data.metrics);
+        
+        // Default create package dropdown to first available package
+        if (res.data.packages.length > 0 && !createDepPackage) {
+          setCreateDepPackage(res.data.packages[0].title);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch departures:", err);
+    } finally {
+      setLoadingDepartures(false);
+      if (showSpinner) setIsRefreshingDepartures(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "departures") {
+      fetchDepartures(false);
+    }
+  }, [activeTab]);
+
+  const handleCreateDepartureSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createDepPackage || !createDepDate || createDepTotalSeats <= 0) {
+      alert("Please enter all details. Total seats must be greater than zero.");
+      return;
+    }
+
+    try {
+      const { createDeparture } = await import("./actions");
+      const matchedPkg = departuresPackages.find(p => p.title === createDepPackage);
+      const res = await createDeparture({
+        packageId: matchedPkg ? matchedPkg.id : undefined,
+        packageName: createDepPackage,
+        departureDate: createDepDate,
+        totalSeats: createDepTotalSeats,
+        status: createDepStatus
+      });
+
+      if (res.success) {
+        alert("Departure created successfully!");
+        setShowCreateModal(false);
+        setCreateDepDate("");
+        fetchDepartures(true);
+      } else {
+        alert("Failed to create departure: " + res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error creating departure: " + err.message);
+    }
+  };
+
+  const handleEditDepartureClick = (dep: any) => {
+    setShowEditModal(dep);
+    setEditDepTotalSeats(dep.total_seats);
+    setEditDepStatus(dep.status);
+  };
+
+  const handleEditDepartureSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showEditModal || editDepTotalSeats <= 0) return;
+
+    try {
+      const { updateDeparture } = await import("./actions");
+      const res = await updateDeparture(showEditModal.id, {
+        totalSeats: editDepTotalSeats,
+        status: editDepStatus
+      });
+
+      if (res.success) {
+        alert("Departure updated successfully!");
+        setShowEditModal(null);
+        fetchDepartures(true);
+      } else {
+        alert("Failed to update departure: " + res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error updating departure: " + err.message);
+    }
+  };
+
+  const handleDeleteDeparture = async (id: number, desc: string) => {
+    if (!confirm(`Are you sure you want to delete the departure for '${desc}'? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { deleteDeparture } = await import("./actions");
+      const res = await deleteDeparture(id);
+      if (res.success) {
+        alert("Departure deleted successfully!");
+        fetchDepartures(true);
+      } else {
+        alert("Failed to delete departure: " + res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error deleting departure.");
+    }
+  };
+
+  const handleViewReportClick = async (dep: any) => {
+    setSelectedReportDep(dep);
+    setLoadingReportBookings(true);
+    setReportBookings([]);
+    try {
+      const { getDepartureBookings } = await import("./actions");
+      const res = await getDepartureBookings(dep.package_name, dep.departure_date);
+      if (res.success && res.data) {
+        setReportBookings(res.data);
+      } else {
+        alert("Failed to fetch report bookings: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingReportBookings(false);
+    }
+  };
+
+  const filteredDepartures = useMemo(() => {
+    return departures.filter(dep => {
+      const matchesSearch = dep.package_name.toLowerCase().includes(departuresSearch.toLowerCase()) ||
+                            dep.departure_date.includes(departuresSearch);
+      const matchesStatus = departureStatusFilter === "all" || dep.status === departureStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [departures, departuresSearch, departureStatusFilter]);
 
   const getWhatsAppLink = (phone: string, text: string) => {
     const cleaned = phone.replace(/\D/g, "");
@@ -674,12 +919,108 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
               <h1 className="text-3xl font-extrabold font-heading text-white">Kamakhya Yatra Dashboard</h1>
             </div>
 
-            <button 
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 px-5 py-2.5 rounded-xl font-bold text-xs transition duration-200"
-            >
-              <LogOut className="w-4 h-4" /> Logout
-            </button>
+            <div className="flex items-center gap-4 relative">
+              {/* Notification Bell */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white transition duration-200"
+                  title="View Notifications"
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#d4af37] text-[#0b1c3e] rounded-full text-[10px] font-black flex items-center justify-center animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden text-slate-800 z-50 animate-fade-in">
+                    {/* Popover Header */}
+                    <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-[#0b1c3e]">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="bg-[#d4af37]/20 text-[#b8952d] px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            {unreadCount} New
+                          </span>
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={handleMarkAllAsRead}
+                          className="text-[11px] font-extrabold text-[#d4af37] hover:text-[#b8952d] transition"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Popover Body */}
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length > 0 ? (
+                        notifications.map((n) => {
+                          const isUnread = !n.is_read;
+                          let TypeIcon = Bell;
+                          let iconColorClass = "bg-blue-50 text-blue-500";
+                          if (n.type === "new_booking") {
+                            TypeIcon = Users;
+                            iconColorClass = "bg-emerald-50 text-emerald-500";
+                          } else if (n.type === "payment_upload") {
+                            TypeIcon = CreditCard;
+                            iconColorClass = "bg-amber-50 text-amber-500";
+                          } else if (n.type === "cancellation_request") {
+                            TypeIcon = AlertTriangle;
+                            iconColorClass = "bg-rose-50 text-rose-500";
+                          }
+
+                          return (
+                            <div 
+                              key={n.id}
+                              onClick={() => handleMarkAsRead(n.id, n.link, n.reference_id)}
+                              className={`p-4 flex gap-3 hover:bg-slate-50/80 cursor-pointer transition relative text-left ${
+                                isUnread ? "bg-slate-50/30" : ""
+                              }`}
+                            >
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconColorClass}`}>
+                                <TypeIcon className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 flex flex-col gap-0.5 pr-2">
+                                <span className={`text-xs font-bold text-slate-800 ${isUnread ? "font-extrabold" : ""}`}>
+                                  {n.title}
+                                </span>
+                                <p className="text-[11px] text-slate-500 leading-normal line-clamp-2">
+                                  {n.message}
+                                </p>
+                                <span className="text-[9px] text-slate-400 font-medium mt-1">
+                                  {getRelativeTime(n.created_at)}
+                                </span>
+                              </div>
+                              {isUnread && (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#d4af37] rounded-full shrink-0" />
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
+                          <span className="text-2xl">✨</span>
+                          <span className="text-xs font-bold text-slate-400">All caught up! No notifications.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 px-5 py-2.5 rounded-xl font-bold text-xs transition duration-200 shrink-0"
+              >
+                <LogOut className="w-4 h-4" /> Logout
+              </button>
+            </div>
           </div>
 
           {/* Tab selectors */}
@@ -723,6 +1064,14 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
               }`}
             >
               Cancellations
+            </button>
+            <button
+              onClick={() => setActiveTab("departures")}
+              className={`pb-3 font-extrabold text-sm uppercase tracking-wider transition duration-150 border-b-2 ${
+                activeTab === "departures" ? "border-[#d4af37] text-white" : "border-transparent text-white/50 hover:text-white"
+              }`}
+            >
+              Departures
             </button>
           </div>
         </div>
@@ -1447,7 +1796,7 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                 </>
               )}
             </div>
-          ) : (
+          ) : activeTab === "cancellations" ? (
             <div className="flex flex-col gap-8">
               {loadingCancellations ? (
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
@@ -1728,6 +2077,443 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                   </div>
                 </>
               )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8">
+              {loadingDepartures ? (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-slate-200 border-t-[#0b1c3e] rounded-full mx-auto mb-4" />
+                  <p className="text-xs text-slate-400 font-bold">Loading scheduled departures...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Total departures</span>
+                        <span className="text-3xl font-black text-[#0b1c3e]">{departuresMetrics?.totalDepartures || 0}</span>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+                        <Calendar className="w-6 h-6" />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Total Seats Capacity</span>
+                        <span className="text-3xl font-black text-[#0b1c3e]">{departuresMetrics?.totalSeats || 0}</span>
+                      </div>
+                      <div className="w-12 h-12 bg-violet-50 text-violet-500 rounded-2xl flex items-center justify-center">
+                        <Users className="w-6 h-6" />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Booked Seats</span>
+                        <span className="text-3xl font-black text-[#0b1c3e]">{departuresMetrics?.bookedSeats || 0}</span>
+                      </div>
+                      <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center">
+                        <Check className="w-6 h-6" />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Overall Occupancy</span>
+                        <span className="text-3xl font-black text-[#0b1c3e]">{departuresMetrics?.occupancyRate || 0}%</span>
+                      </div>
+                      <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Controls bar */}
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                      <div className="relative w-full sm:w-[280px]">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          placeholder="Search departures by package or date..."
+                          value={departuresSearch}
+                          onChange={(e) => setDeparturesSearch(e.target.value)}
+                          className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-xs bg-slate-50/50"
+                        />
+                      </div>
+
+                      <select
+                        value={departureStatusFilter}
+                        onChange={(e) => setDepartureStatusFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="Open">Open</option>
+                        <option value="Sold Out">Sold Out</option>
+                        <option value="Guaranteed">Guaranteed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+
+                      <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="inline-flex items-center gap-1.5 bg-[#d4af37] hover:bg-[#b8952d] text-white px-4 py-2.5 rounded-xl font-extrabold text-xs transition"
+                      >
+                        <Plus className="w-4 h-4" /> Add Departure
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        onClick={() => fetchDepartures(true)}
+                        disabled={isRefreshingDepartures}
+                        className="inline-flex items-center justify-center w-10 h-10 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 text-slate-500 rounded-xl border border-slate-200 transition"
+                        title="Refresh departures list"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshingDepartures ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Departures Table */}
+                  <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
+                            <th className="p-4">Departure Date</th>
+                            <th className="p-4">Yatra Package</th>
+                            <th className="p-4 text-center">Status</th>
+                            <th className="p-4 text-center">Booked Seats</th>
+                            <th className="p-4 text-center">Available Seats</th>
+                            <th className="p-4 text-center">Total Seats</th>
+                            <th className="p-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {filteredDepartures.length > 0 ? (
+                            filteredDepartures.map((dep) => {
+                              const occupancyPct = dep.total_seats > 0 ? Math.round((dep.booked_seats / dep.total_seats) * 100) : 0;
+                              return (
+                                <tr key={dep.id} className="hover:bg-slate-50/30 transition">
+                                  <td className="p-4 font-bold text-[#0b1c3e] text-sm">
+                                    {new Date(dep.departure_date).toLocaleDateString("en-IN", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric"
+                                    })}
+                                  </td>
+                                  <td className="p-4">
+                                    <span className="font-extrabold text-slate-800 text-sm block">{dep.package_name}</span>
+                                    <span className="text-[10px] text-slate-400">ID #{dep.package_id || "Custom"}</span>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <span className={`text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
+                                      dep.status === "Open"
+                                        ? "bg-blue-50 text-blue-600 border-blue-100"
+                                        : dep.status === "Sold Out" || dep.available_seats === 0
+                                        ? "bg-rose-50 text-rose-600 border-rose-100"
+                                        : dep.status === "Guaranteed"
+                                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}>
+                                      {dep.available_seats === 0 ? "Sold Out" : dep.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="font-bold text-[#0b1c3e]">{dep.booked_seats} Seats</span>
+                                      <div className="w-16 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                          className={`h-full rounded-full ${occupancyPct > 90 ? "bg-rose-500" : occupancyPct > 50 ? "bg-amber-400" : "bg-emerald-500"}`}
+                                          style={{ width: `${Math.min(100, occupancyPct)}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-[9px] text-slate-400 font-semibold">{occupancyPct}% full</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-center font-extrabold text-slate-700">
+                                    <span className={dep.available_seats <= 5 ? "text-rose-500 font-black animate-pulse" : "text-emerald-600"}>
+                                      {dep.available_seats} Seats
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-center font-semibold text-slate-500">
+                                    {dep.total_seats} Max
+                                  </td>
+                                  <td className="p-4 text-right">
+                                    <div className="flex gap-2 justify-end">
+                                      <button
+                                        onClick={() => handleViewReportClick(dep)}
+                                        className="bg-slate-50 hover:bg-slate-100 text-[#0b1c3e] border border-slate-200 px-3 py-1.5 rounded-lg font-bold text-[10px] transition"
+                                      >
+                                        Report
+                                      </button>
+                                      <button
+                                        onClick={() => handleEditDepartureClick(dep)}
+                                        className="bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#b8952d] border border-[#d4af37]/35 px-3 py-1.5 rounded-lg font-bold text-[10px] transition"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteDeparture(dep.id, `${dep.package_name} on ${dep.departure_date}`)}
+                                        disabled={dep.booked_seats > 0}
+                                        className="bg-slate-50 hover:bg-rose-50 disabled:opacity-40 hover:text-rose-600 text-slate-400 border border-slate-200 px-2.5 py-1.5 rounded-lg transition"
+                                        title={dep.booked_seats > 0 ? "Cannot delete departure with active bookings" : "Delete departure"}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="text-center py-16 text-slate-400 font-bold">
+                                No scheduled departures match your filters.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Create Departure Modal */}
+          {showCreateModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md overflow-hidden animate-scale-up">
+                <div className="bg-[#0b1c3e] text-white p-6 border-b border-[#d4af37]/20">
+                  <h3 className="font-extrabold font-heading text-lg">Add Tour Departure</h3>
+                  <p className="text-slate-300 text-xs mt-1">Schedule seat capacities for pilgrimage packages.</p>
+                </div>
+                <form onSubmit={handleCreateDepartureSubmit} className="p-6 flex flex-col gap-5">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-[#0b1c3e]">Select Tour Package</label>
+                    <select
+                      value={createDepPackage}
+                      onChange={(e) => setCreateDepPackage(e.target.value)}
+                      className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-transparent text-slate-800"
+                    >
+                      {departuresPackages.map((pkg) => (
+                        <option key={pkg.id} value={pkg.title}>{pkg.title}</option>
+                      ))}
+                      <option value="Custom Plan">Custom / Other Plan</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-[#0b1c3e]">Departure Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={createDepDate}
+                      onChange={(e) => setCreateDepDate(e.target.value)}
+                      className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-slate-50/50 text-slate-850"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-[#0b1c3e]">Total Seats</label>
+                      <input 
+                        type="number" 
+                        min="1"
+                        required
+                        value={createDepTotalSeats}
+                        onChange={(e) => setCreateDepTotalSeats(parseInt(e.target.value) || 0)}
+                        className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-slate-50/50 text-slate-850"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-[#0b1c3e]">Status</label>
+                      <select
+                        value={createDepStatus}
+                        onChange={(e) => setCreateDepStatus(e.target.value)}
+                        className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-transparent text-slate-800"
+                      >
+                        <option value="Open">Open</option>
+                        <option value="Guaranteed">Guaranteed</option>
+                        <option value="Sold Out">Sold Out</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-650 font-bold text-xs transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-[#0b1c3e] hover:bg-[#1e3c72] text-white font-extrabold text-xs transition"
+                    >
+                      Create Departure
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Departure Modal */}
+          {showEditModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-md overflow-hidden animate-scale-up">
+                <div className="bg-[#0b1c3e] text-white p-6 border-b border-[#d4af37]/20">
+                  <h3 className="font-extrabold font-heading text-lg">Modify Departure Capacity</h3>
+                  <p className="text-slate-300 text-xs mt-1">{showEditModal.package_name}</p>
+                </div>
+                <form onSubmit={handleEditDepartureSubmit} className="p-6 flex flex-col gap-5">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Departure Date:</span>
+                      <strong className="text-slate-700">{new Date(showEditModal.departure_date).toLocaleDateString("en-IN")}</strong>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-200/50 pt-2 mt-2">
+                      <span className="text-slate-400">Seats Currently Booked:</span>
+                      <strong className="text-[#0b1c3e]">{showEditModal.booked_seats} Seats</strong>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-[#0b1c3e]">Adjust Total Seats</label>
+                      <input 
+                        type="number" 
+                        min={showEditModal.booked_seats}
+                        required
+                        value={editDepTotalSeats}
+                        onChange={(e) => setEditDepTotalSeats(parseInt(e.target.value) || 0)}
+                        className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-slate-50/50 text-slate-850"
+                      />
+                      <span className="text-[9px] text-slate-400 font-medium leading-tight">Must be at least {showEditModal.booked_seats} seats.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-[#0b1c3e]">Departure Status</label>
+                      <select
+                        value={editDepStatus}
+                        onChange={(e) => setEditDepStatus(e.target.value)}
+                        className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-transparent text-slate-800"
+                      >
+                        <option value="Open">Open</option>
+                        <option value="Guaranteed">Guaranteed</option>
+                        <option value="Sold Out">Sold Out</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(null)}
+                      className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-650 font-bold text-xs transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-[#0b1c3e] hover:bg-[#1e3c72] text-white font-extrabold text-xs transition"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Departure Bookings Report Modal */}
+          {selectedReportDep && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-4xl overflow-hidden animate-scale-up">
+                <div className="bg-[#0b1c3e] text-white p-6 border-b border-[#d4af37]/20 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] text-[#d4af37] font-extrabold uppercase tracking-widest leading-none">Departure-wise Passenger Log</span>
+                    <h3 className="font-extrabold font-heading text-lg mt-1">{selectedReportDep.package_name}</h3>
+                  </div>
+                  <span className="bg-[#d4af37] text-[#0b1c3e] px-4 py-1.5 rounded-full text-xs font-black shrink-0">
+                    Date: {new Date(selectedReportDep.departure_date).toLocaleDateString("en-IN")}
+                  </span>
+                </div>
+
+                <div className="p-6 flex flex-col gap-6">
+                  {/* Summary row */}
+                  <div className="grid grid-cols-3 gap-4 text-center bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs">
+                    <div>
+                      <span className="text-slate-400 block mb-0.5">Assigned Passengers</span>
+                      <strong className="text-sm font-bold text-[#0b1c3e]">{selectedReportDep.booked_seats} Persons</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block mb-0.5">Remaining Capacity</span>
+                      <strong className="text-sm font-bold text-slate-700">{selectedReportDep.available_seats} Seats</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block mb-0.5">Status Check</span>
+                      <strong className="text-sm font-bold text-slate-700">{selectedReportDep.status}</strong>
+                    </div>
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto border border-slate-100 rounded-2xl">
+                    {loadingReportBookings ? (
+                      <div className="py-12 text-center text-slate-400 font-bold">Loading passenger records...</div>
+                    ) : reportBookings.length > 0 ? (
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
+                            <th className="p-3.5">Reference ID</th>
+                            <th className="p-3.5">Customer Name</th>
+                            <th className="p-3.5">Contact</th>
+                            <th className="p-3.5 text-center">Travellers</th>
+                            <th className="p-3.5 text-center">Booking Status</th>
+                            <th className="p-3.5 text-center">Payment Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {reportBookings.map((b) => (
+                            <tr key={b.booking_reference} className="hover:bg-slate-50/40 transition">
+                              <td className="p-3.5 font-bold text-[#0b1c3e]">{b.booking_reference}</td>
+                              <td className="p-3.5 font-extrabold text-slate-700">{b.customer_name}</td>
+                              <td className="p-3.5 text-slate-500">
+                                <span>📞 {b.phone}</span>
+                                <span className="block text-[10px] text-slate-400">{b.email}</span>
+                              </td>
+                              <td className="p-3.5 text-center font-bold text-slate-600">{b.number_of_travellers} Pax</td>
+                              <td className="p-3.5 text-center">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">{b.booking_status}</span>
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">{b.payment_status}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="py-12 text-center text-slate-400 font-bold">No active customer bookings match this departure date.</div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-slate-100">
+                    <button
+                      onClick={() => setSelectedReportDep(null)}
+                      className="px-6 py-2.5 rounded-xl bg-[#0b1c3e] hover:bg-[#1e3c72] text-white font-extrabold text-xs transition"
+                    >
+                      Close Report
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

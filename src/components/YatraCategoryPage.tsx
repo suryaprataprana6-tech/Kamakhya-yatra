@@ -140,15 +140,13 @@ export default function YatraCategoryPage({ categorySlug, initialPackages }: Yat
                           >
                             Details
                           </Link>
-                          <a
-                            href={`https://wa.me/917079044000?text=Hello,%20I'm%20interested%20in%20booking%20the%20${encodeURIComponent(pkg.title)}%20package.`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-2.5 px-4 rounded-xl text-white font-bold text-xs shadow-md transition"
+                          <Link
+                            href={`/book?package=${encodeURIComponent(pkg.title)}`}
+                            className="py-2.5 px-4 rounded-xl text-white font-bold text-xs shadow-md transition flex items-center justify-center"
                             style={{ backgroundColor: config.accentColor }}
                           >
                             Book Now
-                          </a>
+                          </Link>
                         </div>
                       </div>
                     </div>

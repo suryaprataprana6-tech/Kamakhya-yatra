@@ -13,9 +13,7 @@ export default function FeaturedPackages({ packages }: { packages?: any[] }) {
   const router = useRouter();
 
   const handleBookNow = (title: string) => {
-    const message = `Hello Kamakhya Yatra, I want to book the ${title} package.`;
-    const whatsappUrl = `https://wa.me/917079044000?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    router.push(`/book?package=${encodeURIComponent(title)}`);
   };
 
   const filteredAndSortedPackages = useMemo(() => {
