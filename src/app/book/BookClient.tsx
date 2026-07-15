@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, Copy, Upload, ArrowRight, ShieldCheck } from "lucide-react";
+import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, Copy, Upload, ArrowRight, ShieldCheck, Download } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { submitBookingRequest, submitBookingPayment } from "@/app/admin/actions";
@@ -104,6 +104,85 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     navigator.clipboard.writeText("7079044000-3@ybl");
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
+  };
+
+  const downloadReceipt = () => {
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Booking Receipt - ${bookingRef}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #334155; padding: 40px; background-color: #f8fafc; }
+          .receipt-card { max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; }
+          .header { background-color: #0b1c3e; color: #ffffff; padding: 30px; text-align: center; border-bottom: 4px solid #d4af37; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 0.5px; }
+          .header p { margin: 5px 0 0 0; font-size: 12px; color: #94a3b8; font-weight: 600; }
+          .content { padding: 40px; }
+          .row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #e2e8f0; }
+          .row:last-child { border-bottom: none; }
+          .label { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; }
+          .value { font-size: 14px; color: #0b1c3e; font-weight: 800; }
+          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 11px; color: #94a3b8; font-weight: 500; border-top: 1px solid #e2e8f0; }
+          .print-btn { display: inline-block; margin-top: 20px; background-color: #0b1c3e; color: #ffffff; border: none; padding: 12px 30px; font-size: 12px; font-weight: 700; text-transform: uppercase; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+          .print-btn:hover { background-color: #1e3c72; }
+          @media print { .print-btn { display: none; } body { background: white; padding: 0; } .receipt-card { border: none; box-shadow: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-card">
+          <div class="header">
+            <h1>KAMAKHYA YATRA</h1>
+            <p>Pilgrimage Travel Receipt</p>
+          </div>
+          <div class="content">
+            <div class="row">
+              <span class="label">Booking ID / Reference:</span>
+              <span class="value">${bookingRef}</span>
+            </div>
+            <div class="row">
+              <span class="label">Customer Name:</span>
+              <span class="value">${formData.name}</span>
+            </div>
+            <div class="row">
+              <span class="label">Pilgrimage Package:</span>
+              <span class="value">${formData.package}</span>
+            </div>
+            <div class="row">
+              <span class="label">Travel Date:</span>
+              <span class="value">${formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "N/A"}</span>
+            </div>
+            <div class="row">
+              <span class="label">Number of Pilgrims:</span>
+              <span class="value">${formData.guests} Pax</span>
+            </div>
+            <div class="row">
+              <span class="label">Advance Amount Received:</span>
+              <span class="value" style="color: #b8952d; font-size: 16px;">₹${advanceAmount.toLocaleString("en-IN")}</span>
+            </div>
+            <div class="row">
+              <span class="label">Payment Verification Status:</span>
+              <span class="value" style="color: #e28743;">Pending Verification</span>
+            </div>
+            <div style="text-align: center;">
+              <button class="print-btn" onclick="window.print()">Print Receipt</button>
+            </div>
+          </div>
+          <div class="footer">
+            Thank you for choosing Kamakhya Yatra. For support, call +91 70790 44000.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([receiptHtml], { type: "text/html" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Kamakhya_Yatra_Receipt_${bookingRef}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Handle image preview
@@ -391,12 +470,32 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               Namaste {formData.name}, your travel booking details and payment verification are successfully recorded.
             </p>
 
-            <div className="bg-slate-50 border border-slate-100 p-6 rounded-2xl w-full max-w-sm mb-8 flex flex-col gap-2">
-              <span className="text-[10px] text-slate-400 font-extrabold uppercase">YOUR UNIQUE BOOKING ID:</span>
-              <strong className="text-2xl font-extrabold text-[#d4af37] tracking-wider">{bookingRef}</strong>
-              <span className="text-[10px] text-slate-400 mt-2 font-bold leading-normal">
-                Please save this Booking ID. An email receipt confirmation has been dispatched to <strong>{formData.email}</strong>.
-              </span>
+            <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl w-full max-w-md mb-8 flex flex-col gap-4 text-left">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Booking ID:</span>
+                <strong className="text-base font-extrabold text-[#0b1c3e]">{bookingRef}</strong>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Package Name:</span>
+                <strong className="text-xs font-extrabold text-slate-700 truncate max-w-[200px]" title={formData.package}>{formData.package}</strong>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Travel Date:</span>
+                <strong className="text-xs font-extrabold text-slate-700">
+                  {formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}
+                </strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Advance Amount Received:</span>
+                <strong className="text-base font-extrabold text-emerald-600">₹{advanceAmount.toLocaleString("en-IN")}</strong>
+              </div>
+
+              <button 
+                onClick={downloadReceipt}
+                className="w-full mt-4 py-3 bg-[#d4af37] hover:bg-[#b8952d] text-[#0b1c3e] font-black rounded-xl text-xs uppercase tracking-wider transition shadow flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" /> Download Receipt
+              </button>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
