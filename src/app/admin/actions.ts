@@ -751,4 +751,488 @@ async function sendCancellationEmailUpdate(
   }
 }
 
+// ==========================================
+// ENTERPRISE BOOKING CRM SERVER ACTIONS
+// ==========================================
+
+export async function submitBookingRequest(data: {
+  customerName: string;
+  phone: string;
+  email: string;
+  packageName: string;
+  packageId?: number;
+  travelDate: string;
+  boardingPoint: string;
+  numberOfTravellers: number;
+  specialRequirements?: string;
+  source?: string;
+  pageUrl?: string;
+  utmSource?: string;
+  utmCampaign?: string;
+}) {
+  try {
+    // 1. Basic validation
+    if (!data.customerName || !data.phone || !data.email || !data.packageName || !data.travelDate || !data.boardingPoint || !data.numberOfTravellers) {
+      return { success: false, error: "Missing required fields" };
+    }
+
+    // Phone format verification (digits only, length 10-15)
+    const cleanPhone = data.phone.replace(/[^0-9+]/g, "");
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+      return { success: false, error: "Invalid mobile number. Must contain 10-15 digits." };
+    }
+
+    // 2. Insert record
+    const { data: record, error } = await supabaseServer
+      .from("booking_requests")
+      .insert({
+        customer_name: data.customerName,
+        phone: cleanPhone,
+        email: data.email,
+        package_name: data.packageName,
+        package_id: data.packageId || null,
+        travel_date: data.travelDate,
+        boarding_point: data.boardingPoint,
+        number_of_travellers: data.numberOfTravellers,
+        special_requirements: data.specialRequirements || null,
+        booking_amount: 5000.00 * data.numberOfTravellers, // Example dynamic amount calculation, advance set to 5000
+        advance_amount: 5000.00,
+        payment_status: "Unpaid",
+        booking_status: "Pending",
+        source: data.source || "Direct",
+        page_url: data.pageUrl || null,
+        utm_source: data.utmSource || null,
+        utm_campaign: data.utmCampaign || null
+      })
+      .select("*")
+      .single();
+
+    if (error || !record) {
+      console.error("Database insert error:", error);
+      return { success: false, error: error?.message || "Failed to create booking record." };
+    }
+
+    // 3. Send receipt email via SMTP (asynchronous background task)
+    sendBookingReceiptEmail(record).catch(err => {
+      console.error("Failed to send booking receipt email:", err);
+    });
+
+    return { 
+      success: true, 
+      id: record.id, 
+      booking_reference: record.booking_reference,
+      advance_amount: record.advance_amount
+    };
+  } catch (err: any) {
+    console.error("Booking request submission error:", err);
+    return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function submitBookingPayment(
+  bookingId: number,
+  transactionId: string,
+  formData: FormData
+) {
+  try {
+    if (!bookingId || !transactionId) {
+      return { success: false, error: "Booking ID and Transaction ID are required" };
+    }
+
+    const file = formData.get("screenshot") as File;
+    if (!file) {
+      return { success: false, error: "Please upload the payment screenshot." };
+    }
+
+    // Validate screenshot size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: "File size exceeds limit of 5MB." };
+    }
+
+    // Validate screenshot type
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"];
+    if (!allowedTypes.includes(file.type)) {
+      return { success: false, error: "Unsupported file type. Only JPG, PNG, WEBP, and PDF files are allowed." };
+    }
+
+    // Convert file to buffer for Supabase upload
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Dynamic clean name for file
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const path = `screenshots/${bookingId}_${Date.now()}_${cleanFileName}`;
+
+    // Upload to Supabase bucket 'booking-payments'
+    const { error: uploadError } = await supabaseServer.storage
+      .from("booking-payments")
+      .upload(path, buffer, {
+        contentType: file.type,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error("Supabase Storage upload error:", uploadError);
+      return { success: false, error: "Failed to upload payment screenshot: " + uploadError.message };
+    }
+
+    // Get Public URL
+    const { data: publicUrlData } = supabaseServer.storage
+      .from("booking-payments")
+      .getPublicUrl(path);
+
+    const publicUrl = publicUrlData.publicUrl;
+
+    // Update database record
+    const { error: dbError } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        transaction_id: transactionId,
+        payment_screenshot: publicUrl,
+        payment_status: "Payment Submitted",
+        booking_status: "Payment Awaiting", // Awaiting verification
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", bookingId);
+
+    if (dbError) {
+      console.error("Database update error:", dbError);
+      return { success: false, error: "Failed to save payment details in database." };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Payment details submission error:", err);
+    return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function trackBookingRequest(bookingReference: string, phone: string) {
+  try {
+    const cleanRef = bookingReference.trim();
+    const cleanPhone = phone.replace(/[^0-9+]/g, "");
+
+    if (!cleanRef || !cleanPhone) {
+      return { success: false, error: "Booking Reference and Phone Number are required" };
+    }
+
+    const { data: record, error } = await supabaseServer
+      .from("booking_requests")
+      .select("*")
+      .eq("booking_reference", cleanRef)
+      .eq("phone", cleanPhone)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error tracking booking:", error);
+      return { success: false, error: error.message };
+    }
+
+    if (!record) {
+      return { success: false, error: "No booking found with this reference and mobile number." };
+    }
+
+    return { success: true, data: record };
+  } catch (err: any) {
+    console.error("Track booking error:", err);
+    return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function getBookingsData() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { data, error } = await supabaseServer
+      .from("booking_requests")
+      .select("*")
+      .order("id", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching bookings:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Error fetching bookings:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateBookingStatus(id: number, status: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { data: record, error: fetchError } = await supabaseServer
+      .from("booking_requests")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    const { error } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        booking_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating booking status:", error);
+      return { success: false, error: error.message };
+    }
+
+    // Send email update to customer if successful
+    if (record && !fetchError) {
+      sendBookingStatusUpdateEmail(record, status).catch(e => {
+        console.error("Booking status update email failed:", e);
+      });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating booking status:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateBookingPaymentStatus(id: number, paymentStatus: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        payment_status: paymentStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating booking payment status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating booking payment status:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function assignBookingStaff(id: number, staff: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        assigned_staff: staff || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error assigning staff:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error assigning staff:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateBookingNotes(id: number, notes: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        admin_notes: notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating booking notes:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error updating booking notes:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Helper: send SMTP booking confirmation email
+async function sendBookingReceiptEmail(record: any) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const travelDateFormatted = new Date(record.travel_date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
+    });
+
+    const mailOptions = {
+      from: `"Kamakhya Yatra" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: record.email,
+      subject: `Booking Request Received - ${record.booking_reference}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #0b1c3e; text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 10px;">Namaste ${record.customer_name},</h2>
+          <p>Thank you for choosing <strong>Kamakhya Yatra</strong>.</p>
+          <p>Your booking request has been received successfully. Below are your travel details:</p>
+          
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Booking ID:</td>
+                <td style="padding: 6px 0; color: #d4af37; font-weight: bold;">${record.booking_reference}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Package Name:</td>
+                <td style="padding: 6px 0;">${record.package_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travel Date:</td>
+                <td style="padding: 6px 0;">${travelDateFormatted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Boarding Point:</td>
+                <td style="padding: 6px 0;">${record.boarding_point}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travellers:</td>
+                <td style="padding: 6px 0;">${record.number_of_travellers}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #eef2f7; border-left: 4px solid #0b1c3e; padding: 12px; margin: 20px 0; border-radius: 4px;">
+            <strong style="color: #0b1c3e;">Current Status:</strong> <span style="font-weight: bold;">Pending Review</span>
+          </div>
+
+          <p>Our travel specialist team will review your itinerary details and verify your payment submission (if uploaded) shortly.</p>
+          <p style="font-weight: bold; color: #0b1c3e;">Please save your Booking ID for online tracking.</p>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #777;">
+            <p>Regards,<br/><strong>Kamakhya Yatra Team</strong></p>
+            <p><a href="https://www.kamakhyayatra.com" style="color: #d4af37; text-decoration: none; font-weight: bold;">www.kamakhyayatra.com</a> | Helpline: +91 70790 44000</p>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`SMTP confirmation email sent successfully to ${record.email}`);
+  } catch (err) {
+    console.error("Failed to send SMTP receipt email:", err);
+  }
+}
+
+// Helper: send SMTP booking status update email
+async function sendBookingStatusUpdateEmail(record: any, newStatus: string) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const mailOptions = {
+      from: `"Kamakhya Yatra" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: record.email,
+      subject: `Booking Status Updated - ${record.booking_reference}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #0b1c3e; text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 10px;">Namaste ${record.customer_name},</h2>
+          <p>This is an official update regarding your booking with <strong>Kamakhya Yatra</strong>.</p>
+          
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e; width: 120px;">Booking ID:</td>
+                <td style="padding: 6px 0; color: #d4af37; font-weight: bold;">${record.booking_reference}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Package:</td>
+                <td style="padding: 6px 0;">${record.package_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">New Status:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #27ae60;">${newStatus}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p>
+            ${newStatus === "Confirmed" 
+              ? "🎉 We are delighted to inform you that your booking has been <strong>Confirmed</strong>. Your tickets, hotel bookings, and travel coordinates are locked in. A coordinator will call you details."
+              : newStatus === "Payment Received"
+              ? "💳 We have successfully verified your payment transaction details. Your booking is under active confirmation."
+              : newStatus === "Completed"
+              ? "🌟 Thank you for travelling with Kamakhya Yatra! Your yatra is completed. We hope you had a blessed and premium experience."
+              : newStatus === "Cancelled"
+              ? "❌ Your booking request has been marked as <strong>Cancelled</strong>. If you had paid, any eligible refund will be processed per our policy."
+              : `Your booking status is currently: <strong>${newStatus}</strong>.`
+            }
+          </p>
+
+          <p>You can track the live status of your booking at any time by visiting our online tracking portal using your registered mobile number and Booking ID.</p>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #777;">
+            <p>Regards,<br/><strong>Kamakhya Yatra Team</strong></p>
+            <p><a href="https://www.kamakhyayatra.com" style="color: #d4af37; text-decoration: none; font-weight: bold;">www.kamakhyayatra.com</a> | Helpline: +91 70790 44000</p>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`SMTP update email sent successfully to ${record.email} (Status: ${newStatus})`);
+  } catch (err) {
+    console.error("Failed to send SMTP update email:", err);
+  }
+}
+
+
 

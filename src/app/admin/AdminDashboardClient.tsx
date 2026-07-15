@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail } from "lucide-react";
+import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { logoutAdmin, deletePackage } from "./actions";
@@ -21,10 +21,22 @@ interface AnalyticsData {
 
 export default function AdminDashboardClient({ initialPackages }: AdminDashboardClientProps) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "leads" | "cancellations">("packages");
+  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "bookings" | "leads" | "cancellations">("packages");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Bookings management states
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [isRefreshingBookings, setIsRefreshingBookings] = useState(false);
+  const [bookingsSearch, setBookingsSearch] = useState("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [packageFilter, setPackageFilter] = useState("all");
+  const [bookingsNotes, setBookingsNotes] = useState<Record<number, string>>({});
+  const [savingBookingNotesId, setSavingBookingNotesId] = useState<number | null>(null);
+  const [bookingStaffMap, setBookingStaffMap] = useState<Record<number, string>>({});
   
   // Leads management states
   const [leads, setLeads] = useState<any[]>([]);
@@ -60,6 +72,56 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
       p.category.toLowerCase().includes(search.toLowerCase())
     );
   }, [search, initialPackages]);
+
+  const fetchBookings = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshingBookings(true);
+    try {
+      const { getBookingsData } = await import("./actions");
+      const res = await getBookingsData();
+      if (res.success && res.data) {
+        setBookings(res.data);
+        const notesDict: Record<number, string> = {};
+        const staffDict: Record<number, string> = {};
+        res.data.forEach((booking: any) => {
+          notesDict[booking.id] = booking.admin_notes || "";
+          staffDict[booking.id] = booking.assigned_staff || "";
+        });
+        setBookingsNotes(notesDict);
+        setBookingStaffMap(staffDict);
+      }
+    } catch (err) {
+      console.error("Failed to fetch bookings:", err);
+    } finally {
+      setLoadingBookings(false);
+      if (showSpinner) setIsRefreshingBookings(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "bookings") {
+      fetchBookings(false);
+    }
+  }, [activeTab]);
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((booking) => {
+      const matchesSearch =
+        (booking.booking_reference || "").toLowerCase().includes(bookingsSearch.toLowerCase()) ||
+        (booking.customer_name || "").toLowerCase().includes(bookingsSearch.toLowerCase()) ||
+        (booking.phone || "").toLowerCase().includes(bookingsSearch.toLowerCase()) ||
+        (booking.package_name || "").toLowerCase().includes(bookingsSearch.toLowerCase());
+
+      const matchesStatus = bookingStatusFilter === "all" || booking.booking_status === bookingStatusFilter;
+      const matchesPaymentStatus = paymentStatusFilter === "all" || booking.payment_status === paymentStatusFilter;
+      const matchesPackage = packageFilter === "all" || booking.package_name === packageFilter;
+
+      return matchesSearch && matchesStatus && matchesPaymentStatus && matchesPackage;
+    });
+  }, [bookings, bookingsSearch, bookingStatusFilter, paymentStatusFilter, packageFilter]);
+
+  const bookingPackageOptions = useMemo(() => {
+    return Array.from(new Set(bookings.map((booking) => booking.package_name).filter(Boolean)));
+  }, [bookings]);
 
   // Fetch leads data
   const fetchLeads = async (showSpinner = false) => {
@@ -294,6 +356,160 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
     }
   };
 
+  const handleBookingStatusChange = async (bookingId: number, newStatus: string) => {
+    try {
+      const { updateBookingStatus } = await import("./actions");
+      const res = await updateBookingStatus(bookingId, newStatus);
+      if (res.success) {
+        setBookings(prev => prev.map(booking => booking.id === bookingId ? { ...booking, booking_status: newStatus } : booking));
+        alert("Booking status updated successfully.");
+      } else {
+        alert("Failed to update booking status: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating booking status.");
+    }
+  };
+
+  const handleBookingPaymentStatusChange = async (bookingId: number, newStatus: string) => {
+    try {
+      const { updateBookingPaymentStatus } = await import("./actions");
+      const res = await updateBookingPaymentStatus(bookingId, newStatus);
+      if (res.success) {
+        setBookings(prev => prev.map(booking => booking.id === bookingId ? { ...booking, payment_status: newStatus } : booking));
+        alert("Payment status updated successfully.");
+      } else {
+        alert("Failed to update payment status: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating payment status.");
+    }
+  };
+
+  const handleAssignBookingStaff = async (bookingId: number) => {
+    const staff = bookingStaffMap[bookingId]?.trim();
+    if (!staff) {
+      alert("Please enter a staff name before saving.");
+      return;
+    }
+    try {
+      const { assignBookingStaff } = await import("./actions");
+      const res = await assignBookingStaff(bookingId, staff);
+      if (res.success) {
+        setBookings(prev => prev.map(booking => booking.id === bookingId ? { ...booking, assigned_staff: staff } : booking));
+        alert("Assigned staff successfully.");
+      } else {
+        alert("Failed to assign staff: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error assigning staff.");
+    }
+  };
+
+  const handleSaveBookingNotes = async (bookingId: number) => {
+    setSavingBookingNotesId(bookingId);
+    try {
+      const { updateBookingNotes } = await import("./actions");
+      const notesText = bookingsNotes[bookingId] || "";
+      const res = await updateBookingNotes(bookingId, notesText);
+      if (res.success) {
+        setBookings(prev => prev.map(booking => booking.id === bookingId ? { ...booking, admin_notes: notesText } : booking));
+        alert("Booking notes saved successfully.");
+      } else {
+        alert("Failed to save notes: " + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving booking notes.");
+    } finally {
+      setSavingBookingNotesId(null);
+    }
+  };
+
+  const handleExportBookingsCSV = () => {
+    if (filteredBookings.length === 0) {
+      alert("No bookings available to export.");
+      return;
+    }
+    const headers = [
+      "ID", "Booking Reference", "Customer Name", "Phone", "Email", "Package Name", "Travel Date",
+      "Boarding Point", "Travellers", "Booking Status", "Payment Status", "Advance Amount",
+      "Booking Amount", "Transaction ID", "Assigned Staff", "Source", "Created At"
+    ];
+    const rows = filteredBookings.map((booking) => [
+      booking.id,
+      booking.booking_reference,
+      `"${(booking.customer_name || '').replace(/"/g, '""')}"`,
+      `"${(booking.phone || '').replace(/"/g, '""')}"`,
+      `"${(booking.email || '').replace(/"/g, '""')}"`,
+      `"${(booking.package_name || '').replace(/"/g, '""')}"`,
+      booking.travel_date || "",
+      `"${(booking.boarding_point || '').replace(/"/g, '""')}"`,
+      booking.number_of_travellers || "",
+      booking.booking_status || "",
+      booking.payment_status || "",
+      Number(booking.advance_amount || 0),
+      Number(booking.booking_amount || 0),
+      booking.transaction_id || "",
+      booking.assigned_staff || "",
+      booking.source || "",
+      new Date(booking.created_at).toLocaleString("en-IN")
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bookings_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportBookingsExcel = async () => {
+    if (filteredBookings.length === 0) {
+      alert("No bookings available to export.");
+      return;
+    }
+    try {
+      const XLSX = await import("xlsx");
+      const dataToExport = filteredBookings.map((booking) => ({
+        "ID": booking.id,
+        "Booking Reference": booking.booking_reference,
+        "Customer Name": booking.customer_name,
+        "Phone Number": booking.phone,
+        "Email Address": booking.email,
+        "Package Name": booking.package_name,
+        "Travel Date": booking.travel_date,
+        "Boarding Point": booking.boarding_point,
+        "Travellers": booking.number_of_travellers,
+        "Booking Status": booking.booking_status,
+        "Payment Status": booking.payment_status,
+        "Advance Amount": Number(booking.advance_amount || 0),
+        "Booking Amount": Number(booking.booking_amount || 0),
+        "Transaction ID": booking.transaction_id || "",
+        "Assigned Staff": booking.assigned_staff || "",
+        "Source": booking.source || "",
+        "Date Submitted": new Date(booking.created_at).toLocaleString("en-IN")
+      }));
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Bookings");
+      const maxColWidth = Object.keys(dataToExport[0] || {}).map(key => ({
+        wch: Math.max(key.length, ...dataToExport.map(row => String(row[key as keyof typeof row] || '').length)) + 2
+      }));
+      ws['!cols'] = maxColWidth;
+      XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (err) {
+      console.error("Excel export error:", err);
+      alert("Failed to export to Excel. Exporting to CSV instead.");
+      handleExportBookingsCSV();
+    }
+  };
+
   const handleExportCSV = () => {
     if (filteredLeads.length === 0) {
       alert("No leads available to export.");
@@ -483,6 +699,14 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
               }`}
             >
               Analytics
+            </button>
+            <button
+              onClick={() => setActiveTab("bookings")}
+              className={`pb-3 font-extrabold text-sm uppercase tracking-wider transition duration-150 border-b-2 ${
+                activeTab === "bookings" ? "border-[#d4af37] text-white" : "border-transparent text-white/50 hover:text-white"
+              }`}
+            >
+              Bookings
             </button>
             <button
               onClick={() => setActiveTab("leads")}
@@ -717,6 +941,267 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                           <p className="text-xs text-slate-400 font-bold py-6 text-center">No page views recorded yet.</p>
                         )}
                       </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : activeTab === "bookings" ? (
+            <div className="flex flex-col gap-8">
+              {loadingBookings ? (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
+                  <div className="animate-spin w-8 h-8 border-4 border-slate-200 border-t-[#0b1c3e] rounded-full mx-auto mb-4" />
+                  <p className="text-xs text-slate-400 font-bold">Loading bookings data...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Bookings</span>
+                      <span className="text-2xl font-black text-[#0b1c3e] mt-1">{bookings.length}</span>
+                    </div>
+                    <div className="bg-amber-50/40 p-5 rounded-2xl border border-amber-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Pending</span>
+                      <span className="text-2xl font-black text-amber-700 mt-1">{bookings.filter((booking) => booking.booking_status === "Pending").length}</span>
+                    </div>
+                    <div className="bg-blue-50/40 p-5 rounded-2xl border border-blue-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Payment Awaiting</span>
+                      <span className="text-2xl font-black text-blue-700 mt-1">{bookings.filter((booking) => booking.booking_status === "Payment Awaiting").length}</span>
+                    </div>
+                    <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Confirmed</span>
+                      <span className="text-2xl font-black text-emerald-700 mt-1">{bookings.filter((booking) => booking.booking_status === "Confirmed").length}</span>
+                    </div>
+                    <div className="bg-rose-50/40 p-5 rounded-2xl border border-rose-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Cancelled</span>
+                      <span className="text-2xl font-black text-rose-700 mt-1">{bookings.filter((booking) => booking.booking_status === "Cancelled").length}</span>
+                    </div>
+                    <div className="bg-violet-50/40 p-5 rounded-2xl border border-violet-100/60 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wider">Collected</span>
+                      <span className="text-2xl font-black text-violet-700 mt-1">₹{bookings.filter((booking) => booking.payment_status === "Paid" || booking.payment_status === "Payment Received").reduce((sum, booking) => sum + Number(booking.booking_amount || 0), 0).toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Revenue</span>
+                      <span className="text-2xl font-black text-slate-700 mt-1">₹{bookings.filter((booking) => booking.payment_status !== "Paid" && booking.payment_status !== "Payment Received" && booking.payment_status !== "Refunded").reduce((sum, booking) => sum + Number(booking.advance_amount || 0), 0).toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                      <div className="relative w-full sm:w-[260px]">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          placeholder="Search Booking ID, customer or phone"
+                          value={bookingsSearch}
+                          onChange={(e) => setBookingsSearch(e.target.value)}
+                          className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-xs bg-slate-50/50"
+                        />
+                      </div>
+
+                      <select
+                        value={bookingStatusFilter}
+                        onChange={(e) => setBookingStatusFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Booking Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Payment Awaiting">Payment Awaiting</option>
+                        <option value="Payment Received">Payment Received</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+
+                      <select
+                        value={paymentStatusFilter}
+                        onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Payment Statuses</option>
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Payment Submitted">Payment Submitted</option>
+                        <option value="Under Verification">Under Verification</option>
+                        <option value="Partially Paid">Partially Paid</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Refunded">Refunded</option>
+                      </select>
+
+                      <select
+                        value={packageFilter}
+                        onChange={(e) => setPackageFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                      >
+                        <option value="all">All Packages</option>
+                        {bookingPackageOptions.map((pkg) => (
+                          <option key={pkg} value={pkg}>{pkg}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                      <button
+                        onClick={handleExportBookingsCSV}
+                        className="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Export CSV
+                      </button>
+                      <button
+                        onClick={handleExportBookingsExcel}
+                        className="inline-flex items-center gap-1.5 bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#b8952d] border border-[#d4af37]/35 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Export Excel
+                      </button>
+                      <button
+                        onClick={() => fetchBookings(true)}
+                        disabled={isRefreshingBookings}
+                        className="inline-flex items-center justify-center w-10 h-10 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 text-slate-500 rounded-xl border border-slate-200 transition"
+                        title="Refresh bookings"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshingBookings ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
+                            <th className="p-4">Booking ID</th>
+                            <th className="p-4">Customer</th>
+                            <th className="p-4">Package</th>
+                            <th className="p-4">Travel</th>
+                            <th className="p-4">Booking Status</th>
+                            <th className="p-4">Payment Status</th>
+                            <th className="p-4">Payment</th>
+                            <th className="p-4">Assigned</th>
+                            <th className="p-4">Admin Notes</th>
+                            <th className="p-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {filteredBookings.length > 0 ? (
+                            filteredBookings.map((booking) => (
+                              <tr key={booking.id} className="hover:bg-slate-50/30 transition align-top">
+                                <td className="p-4 font-bold text-[#0b1c3e]">
+                                  <div className="flex flex-col gap-1">
+                                    <span>{booking.booking_reference}</span>
+                                    <span className="text-[10px] text-slate-400">ID #{booking.id}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-extrabold text-slate-800 text-sm">{booking.customer_name}</span>
+                                    <span className="text-slate-500">📞 {booking.phone}</span>
+                                    <span className="text-slate-400 text-[11px]">{booking.email}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-semibold text-slate-700">{booking.package_name}</span>
+                                    <span className="text-slate-500">👥 {booking.number_of_travellers} Travellers</span>
+                                    <span className="text-slate-500">📍 {booking.boarding_point}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-slate-700 font-semibold">{new Date(booking.travel_date).toLocaleDateString("en-IN")}</span>
+                                    <span className="text-slate-400">Advance: ₹{Number(booking.advance_amount || 0).toLocaleString("en-IN")}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <select
+                                    value={booking.booking_status || "Pending"}
+                                    onChange={(e) => handleBookingStatusChange(booking.id, e.target.value)}
+                                    className="w-full text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer bg-slate-50 text-slate-700"
+                                  >
+                                    <option value="Pending">Pending</option>
+                                    <option value="Contacted">Contacted</option>
+                                    <option value="Payment Awaiting">Payment Awaiting</option>
+                                    <option value="Payment Received">Payment Received</option>
+                                    <option value="Confirmed">Confirmed</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                  </select>
+                                </td>
+                                <td className="p-4">
+                                  <select
+                                    value={booking.payment_status || "Unpaid"}
+                                    onChange={(e) => handleBookingPaymentStatusChange(booking.id, e.target.value)}
+                                    className="w-full text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer bg-slate-50 text-slate-700"
+                                  >
+                                    <option value="Unpaid">Unpaid</option>
+                                    <option value="Payment Submitted">Payment Submitted</option>
+                                    <option value="Under Verification">Under Verification</option>
+                                    <option value="Partially Paid">Partially Paid</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Refunded">Refunded</option>
+                                  </select>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-slate-700 font-semibold">Txn: {booking.transaction_id || "—"}</span>
+                                    {booking.payment_screenshot ? (
+                                      <a href={booking.payment_screenshot} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View Screenshot</a>
+                                    ) : (
+                                      <span className="text-slate-400">No screenshot</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-2">
+                                    <input
+                                      type="text"
+                                      value={bookingStaffMap[booking.id] || ""}
+                                      onChange={(e) => setBookingStaffMap(prev => ({ ...prev, [booking.id]: e.target.value }))}
+                                      placeholder="Staff"
+                                      className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:border-[#0b1c3e]"
+                                    />
+                                    <button
+                                      onClick={() => handleAssignBookingStaff(booking.id)}
+                                      className="bg-[#0b1c3e] text-white px-3 py-2 rounded-lg text-[10px] font-extrabold uppercase"
+                                    >
+                                      Assign
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-2">
+                                    <textarea
+                                      rows={2}
+                                      value={bookingsNotes[booking.id] || ""}
+                                      onChange={(e) => setBookingsNotes(prev => ({ ...prev, [booking.id]: e.target.value }))}
+                                      placeholder="Admin notes"
+                                      className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:border-[#0b1c3e] resize-none"
+                                    />
+                                    <button
+                                      onClick={() => handleSaveBookingNotes(booking.id)}
+                                      disabled={savingBookingNotesId === booking.id}
+                                      className="bg-slate-800 text-white px-3 py-2 rounded-lg text-[10px] font-extrabold uppercase"
+                                    >
+                                      {savingBookingNotesId === booking.id ? "Saving..." : "Save Notes"}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-right">
+                                  <div className="flex flex-col gap-2 items-end">
+                                    <a href={`mailto:${booking.email}?subject=${encodeURIComponent(`Booking Update - ${booking.booking_reference}`)}`} className="text-blue-500 hover:underline text-[11px] font-bold">Email</a>
+                                    <a href={getWhatsAppLink(booking.phone, `Hello ${booking.customer_name},\n\nBooking ID:\n${booking.booking_reference}\n\nPackage:\n${booking.package_name}\n\nStatus:\n${booking.booking_status}\n\nThank you.\n\nKamakhya Yatra Team`)} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline text-[11px] font-bold">WhatsApp</a>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={10} className="text-center py-16 text-slate-400 font-bold">
+                                No bookings match your filters.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </>
