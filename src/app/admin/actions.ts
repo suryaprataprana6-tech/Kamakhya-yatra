@@ -516,7 +516,7 @@ export async function submitCancellationRequest(data: {
     }
 
     // Create admin notification
-    createAdminNotification(
+    await createAdminNotification(
       "cancellation_request",
       `Cancellation Request: ${data.bookingId.trim()}`,
       `Cancellation request submitted by ${data.customerName.trim()} for package ${data.packageName.trim()}. Reason: ${data.cancellationReason.trim()}`,
@@ -525,7 +525,7 @@ export async function submitCancellationRequest(data: {
     ).catch(err => console.error("Failed to create admin cancellation notification:", err));
 
     // Send admin notification email
-    sendAdminCancellationNotificationEmail({
+    await sendAdminCancellationNotificationEmail({
       bookingId: data.bookingId.trim(),
       customerName: data.customerName.trim(),
       phone: cleanedPhone,
@@ -627,7 +627,7 @@ export async function updateCancellationStatus(id: number, status: string) {
 
     // 2. Send email notification asynchronously
     if (record && !fetchError) {
-      sendCancellationEmailUpdate(
+      await sendCancellationEmailUpdate(
         record.customer_name,
         record.email,
         record.booking_id,
@@ -674,7 +674,7 @@ export async function updateCancellationRefundStatus(id: number, refundStatus: s
 
     // 2. Send email notification asynchronously
     if (record && !fetchError) {
-      sendCancellationEmailUpdate(
+      await sendCancellationEmailUpdate(
         record.customer_name,
         record.email,
         record.booking_id,
@@ -887,7 +887,7 @@ export async function submitBookingRequest(data: {
     }
 
     // Create admin notification in database
-    createAdminNotification(
+    await createAdminNotification(
       "new_booking",
       `New Booking: ${record.booking_reference}`,
       `New booking request submitted by ${record.customer_name} for ${record.package_name}.`,
@@ -896,12 +896,12 @@ export async function submitBookingRequest(data: {
     ).catch(err => console.error("Failed to create admin booking notification:", err));
 
     // Send admin notification email via SMTP
-    sendAdminBookingReceiptEmail(record).catch(err => {
+    await sendAdminBookingReceiptEmail(record).catch(err => {
       console.error("Failed to send admin booking alert email:", err);
     });
 
-    // 3. Send receipt email via SMTP (asynchronous background task)
-    sendBookingReceiptEmail(record).catch(err => {
+    // 3. Send receipt email via SMTP
+    await sendBookingReceiptEmail(record).catch(err => {
       console.error("Failed to send booking receipt email:", err);
     });
 
@@ -1166,7 +1166,7 @@ export async function updateBookingStatus(id: number, status: string) {
 
     // Send email update to customer if successful
     if (record && !fetchError) {
-      sendBookingStatusUpdateEmail(record, status).catch(e => {
+      await sendBookingStatusUpdateEmail(record, status).catch(e => {
         console.error("Booking status update email failed:", e);
       });
     }
@@ -1331,10 +1331,14 @@ async function sendBookingReceiptEmail(record: any) {
       `
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`SMTP confirmation email sent successfully to ${record.email}`);
-  } catch (err) {
-    console.error("Failed to send SMTP receipt email:", err);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`SMTP confirmation email sent successfully:`);
+    console.log(`- Recipient: ${mailOptions.to}`);
+    console.log(`- Subject: ${mailOptions.subject}`);
+    console.log(`- SMTP Response: ${info.response}`);
+  } catch (err: any) {
+    console.error(`Failed to send SMTP receipt email to ${record.email} with subject: Booking Request Received - ${record.booking_reference}`);
+    console.error("- SMTP Error:", err.message || err);
   }
 }
 
