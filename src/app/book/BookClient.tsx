@@ -151,7 +151,19 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
+  const getSelectedServices = () => {
+    if (!fareRule) return { hotel: "Standard", meals: "Basic", transport: "Shared Vehicle", support: "Normal" };
+    switch (formData.travelClass) {
+      case "SL": return fareRule.sl_services || { hotel: "Standard", meals: "Basic", transport: "Shared", support: "Normal" };
+      case "3AC": return fareRule.ac3_services || { hotel: "Deluxe", meals: "Standard", transport: "AC Vehicle", support: "Priority" };
+      case "2AC": return fareRule.ac2_services || { hotel: "Premium", meals: "Premium", transport: "AC Deluxe", support: "Priority" };
+      case "Flight": return fareRule.flight_services || { hotel: "Luxury", meals: "Premium", transport: "Premium AC", support: "VIP" };
+      default: return { hotel: "Standard", meals: "Basic", transport: "Shared Vehicle", support: "Normal" };
+    }
+  };
+
   const downloadReceipt = () => {
+    const services = getSelectedServices();
     const receiptHtml = `
       <!DOCTYPE html>
       <html>
@@ -159,74 +171,134 @@ function BookingFormContent({ packages }: { packages: any[] }) {
         <title>Booking Receipt - ${bookingRef}</title>
         <style>
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #334155; padding: 40px; background-color: #f8fafc; }
-          .receipt-card { max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; }
-          .header { background-color: #0b1c3e; color: #ffffff; padding: 30px; text-align: center; border-bottom: 4px solid #d4af37; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 0.5px; }
-          .header p { margin: 5px 0 0 0; font-size: 12px; color: #94a3b8; font-weight: 600; }
+          .receipt-card { max-width: 750px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; }
+          .header { background-color: #0b1c3e; color: #ffffff; padding: 40px; text-align: center; border-bottom: 5px solid #d4af37; }
+          .header h1 { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 1px; color: #d4af37; }
+          .header p { margin: 5px 0 0 0; font-size: 14px; color: #f1f5f9; font-weight: 500; text-transform: uppercase; letter-spacing: 2px; }
           .content { padding: 40px; }
-          .row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px dashed #e2e8f0; }
-          .row:last-child { border-bottom: none; }
-          .label { font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; }
+          .section-title { font-size: 14px; font-weight: 800; color: #0b1c3e; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; margin-bottom: 20px; }
+          .section-title:first-child { margin-top: 0; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+          .row { display: flex; flex-direction: column; gap: 4px; }
+          .row-full { grid-column: span 2; display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed #e2e8f0; flex-direction: row; align-items: center; }
+          .label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
           .value { font-size: 14px; color: #0b1c3e; font-weight: 800; }
-          .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 11px; color: #94a3b8; font-weight: 500; border-top: 1px solid #e2e8f0; }
-          .print-btn { display: inline-block; margin-top: 20px; background-color: #0b1c3e; color: #ffffff; border: none; padding: 12px 30px; font-size: 12px; font-weight: 700; text-transform: uppercase; border-radius: 12px; cursor: pointer; transition: 0.2s; }
-          .print-btn:hover { background-color: #1e3c72; }
-          @media print { .print-btn { display: none; } body { background: white; padding: 0; } .receipt-card { border: none; box-shadow: none; } }
+          .highlight-row { background: #f8fafc; padding: 15px; border-radius: 12px; margin-top: 10px; }
+          .notice { background: #fffbeb; border: 1px solid #fef3c7; padding: 15px; border-radius: 12px; margin-top: 20px; font-size: 12px; color: #b45309; font-weight: 600; text-align: center; }
+          .footer { background-color: #f8fafc; padding: 30px; text-align: center; font-size: 12px; color: #64748b; font-weight: 500; border-top: 1px solid #e2e8f0; }
+          .print-btn { display: inline-block; margin-top: 30px; background-color: #d4af37; color: #0b1c3e; border: none; padding: 14px 40px; font-size: 13px; font-weight: 800; text-transform: uppercase; border-radius: 12px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(212, 175, 55, 0.2); }
+          .print-btn:hover { background-color: #b8952d; transform: translateY(-2px); }
+          @media print { .print-btn { display: none; } body { background: white; padding: 0; } .receipt-card { border: none; box-shadow: none; max-width: 100%; } }
         </style>
       </head>
       <body>
         <div class="receipt-card">
           <div class="header">
             <h1>KAMAKHYA YATRA</h1>
-            <p>Pilgrimage Travel Receipt</p>
+            <p>Official Booking Invoice</p>
           </div>
           <div class="content">
-            <div class="row">
-              <span class="label">Booking ID / Reference:</span>
-              <span class="value">${bookingRef}</span>
+            <div class="section-title">Passenger & Booking Details</div>
+            <div class="grid">
+              <div class="row">
+                <span class="label">Booking ID</span>
+                <span class="value">${bookingRef}</span>
+              </div>
+              <div class="row">
+                <span class="label">Booking Status</span>
+                <span class="value" style="color: #059669;">Pending Verification</span>
+              </div>
+              <div class="row">
+                <span class="label">Customer Name</span>
+                <span class="value">${formData.name}</span>
+              </div>
+              <div class="row">
+                <span class="label">Phone Number</span>
+                <span class="value">${formData.phone}</span>
+              </div>
+              <div class="row">
+                <span class="label">Email Address</span>
+                <span class="value">${formData.email || "N/A"}</span>
+              </div>
+              <div class="row">
+                <span class="label">Number of Travellers</span>
+                <span class="value">${formData.guests} Pax</span>
+              </div>
             </div>
-            <div class="row">
-              <span class="label">Customer Name:</span>
-              <span class="value">${formData.name}</span>
+
+            <div class="section-title">Package Details</div>
+            <div class="grid">
+              <div class="row row-full">
+                <span class="label">Package Name</span>
+                <span class="value">${formData.package}</span>
+              </div>
+              <div class="row">
+                <span class="label">Travel Class</span>
+                <span class="value" style="color: #d4af37;">${formData.travelClass || "Standard"}</span>
+              </div>
+              <div class="row">
+                <span class="label">Travel Date</span>
+                <span class="value">${formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "N/A"}</span>
+              </div>
             </div>
-            <div class="row">
-              <span class="label">Pilgrimage Package:</span>
-              <span class="value">${formData.package}</span>
+
+            <div class="section-title">Services Included</div>
+            <div class="grid">
+              <div class="row">
+                <span class="label">Hotel Category</span>
+                <span class="value">${services.hotel}</span>
+              </div>
+              <div class="row">
+                <span class="label">Meal Category</span>
+                <span class="value">${services.meals}</span>
+              </div>
+              <div class="row">
+                <span class="label">Transport Category</span>
+                <span class="value">${services.transport}</span>
+              </div>
+              <div class="row">
+                <span class="label">Support</span>
+                <span class="value">${services.support}</span>
+              </div>
             </div>
-            <div class="row">
-              <span class="label">Travel Date:</span>
-              <span class="value">${formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "N/A"}</span>
-            </div>
-            <div class="row">
-              <span class="label">Number of Pilgrims:</span>
-              <span class="value">${formData.guests} Pax</span>
-            </div>
-            <div class="row">
-              <span class="label">Travel Class:</span>
-              <span class="value">${formData.travelClass || "Standard"}</span>
-            </div>
-            <div class="row">
-              <span class="label">Total Package Cost:</span>
+
+            <div class="section-title">Fare Breakdown</div>
+            <div class="row row-full">
+              <span class="label">Total Package Cost</span>
               <span class="value">₹${packageCost.toLocaleString("en-IN")}</span>
             </div>
-            <div class="row">
-              <span class="label">Advance Amount Received:</span>
-              <span class="value" style="color: #b8952d; font-size: 16px;">₹${advanceAmount.toLocaleString("en-IN")}</span>
+            <div class="row row-full highlight-row">
+              <span class="label">Advance Booking Amount Paid</span>
+              <span class="value" style="color: #059669; font-size: 16px;">₹${advanceAmount.toLocaleString("en-IN")}</span>
             </div>
-            <div class="row">
-              <span class="label">Balance Due:</span>
-              <span class="value" style="color: #e24343;">₹${balanceAmount.toLocaleString("en-IN")}</span>
+            <div class="row row-full">
+              <span class="label">Balance Due</span>
+              <span class="value" style="color: #e11d48; font-size: 16px;">₹${balanceAmount.toLocaleString("en-IN")}</span>
             </div>
-            <div class="row">
-              <span class="label">Payment Verification Status:</span>
-              <span class="value" style="color: #e28743;">Pending Verification</span>
+
+            <div class="section-title">Payment Details</div>
+            <div class="grid">
+              <div class="row">
+                <span class="label">Payment Status</span>
+                <span class="value" style="color: #d97706;">Pending Verification</span>
+              </div>
+              <div class="row">
+                <span class="label">Transaction ID / UTR</span>
+                <span class="value">${transactionId || "N/A"}</span>
+              </div>
             </div>
+
+            <div class="notice">
+              Remaining balance amount must be paid before journey commencement.
+            </div>
+
             <div style="text-align: center;">
-              <button class="print-btn" onclick="window.print()">Print Receipt</button>
+              <button class="print-btn" onclick="window.print()">Download / Print Receipt</button>
             </div>
           </div>
           <div class="footer">
-            Thank you for choosing Kamakhya Yatra. For support, call +91 70790 44000.
+            <strong>Thank you for choosing Kamakhya Yatra.</strong><br/>
+            For support and queries, call +91 70790 44000 or email support@kamakhyayatra.com
           </div>
         </div>
       </body>
@@ -603,29 +675,54 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               Namaste {formData.name}, your travel booking details and payment verification are successfully recorded.
             </p>
 
-            <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl w-full max-w-md mb-8 flex flex-col gap-4 text-left">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Booking ID:</span>
-                <strong className="text-base font-extrabold text-[#0b1c3e]">{bookingRef}</strong>
+            <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl w-full max-w-lg mb-8 flex flex-col gap-4 text-left shadow-sm">
+              <h4 className="text-sm font-black text-[#0b1c3e] border-b-2 border-slate-200 pb-2 mb-2 uppercase tracking-wide">Booking Summary</h4>
+              <div className="grid grid-cols-2 gap-4 border-b border-slate-200/60 pb-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase">Booking ID</span>
+                  <strong className="text-sm font-extrabold text-[#0b1c3e]">{bookingRef}</strong>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase">Travel Date</span>
+                  <strong className="text-sm font-extrabold text-slate-700">
+                    {formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}
+                  </strong>
+                </div>
+                <div className="flex flex-col gap-1 col-span-2">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase">Package Name</span>
+                  <strong className="text-sm font-extrabold text-slate-700">{formData.package}</strong>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase">Travel Class</span>
+                  <strong className="text-sm font-extrabold text-[#d4af37]">{formData.travelClass || "Standard"}</strong>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase">Travellers</span>
+                  <strong className="text-sm font-extrabold text-slate-700">{formData.guests} Pax</strong>
+                </div>
               </div>
-              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Package Name:</span>
-                <strong className="text-xs font-extrabold text-slate-700 truncate max-w-[200px]" title={formData.package}>{formData.package}</strong>
+
+              <h4 className="text-sm font-black text-[#0b1c3e] border-b-2 border-slate-200 pb-2 mt-2 mb-2 uppercase tracking-wide">Fare Breakdown</h4>
+              <div className="flex justify-between items-center pb-2">
+                <span className="text-xs text-slate-500 font-extrabold">Total Package Cost:</span>
+                <strong className="text-sm font-extrabold text-slate-800">₹{packageCost.toLocaleString("en-IN")}</strong>
               </div>
-              <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Travel Date:</span>
-                <strong className="text-xs font-extrabold text-slate-700">
-                  {formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A"}
-                </strong>
+              <div className="flex justify-between items-center pb-2">
+                <span className="text-xs text-slate-500 font-extrabold">Advance Booking Amount Paid:</span>
+                <strong className="text-sm font-extrabold text-emerald-600">₹{advanceAmount.toLocaleString("en-IN")}</strong>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase">Advance Amount Received:</span>
-                <strong className="text-base font-extrabold text-emerald-600">₹{advanceAmount.toLocaleString("en-IN")}</strong>
+              <div className="flex justify-between items-center pb-4 border-b border-slate-200/60">
+                <span className="text-xs text-rose-500 font-extrabold">Balance Due:</span>
+                <strong className="text-sm font-extrabold text-rose-600">₹{balanceAmount.toLocaleString("en-IN")}</strong>
+              </div>
+              
+              <div className="text-center mt-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                <span className="text-xs font-bold text-amber-700">Remaining balance amount must be paid before journey commencement.</span>
               </div>
 
               <button 
                 onClick={downloadReceipt}
-                className="w-full mt-4 py-3 bg-[#d4af37] hover:bg-[#b8952d] text-[#0b1c3e] font-black rounded-xl text-xs uppercase tracking-wider transition shadow flex items-center justify-center gap-2"
+                className="w-full mt-4 py-4 bg-[#d4af37] hover:bg-[#b8952d] text-[#0b1c3e] font-black rounded-xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" /> Download Receipt
               </button>
