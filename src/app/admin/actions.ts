@@ -789,6 +789,13 @@ export async function submitBookingRequest(data: {
   pageUrl?: string;
   utmSource?: string;
   utmCampaign?: string;
+  travelClass?: string;
+  packageCost?: number;
+  advanceAmount?: number;
+  balanceAmount?: number;
+  hotelCategory?: string;
+  mealCategory?: string;
+  transportCategory?: string;
 }) {
   try {
     // 1. Basic validation
@@ -802,7 +809,7 @@ export async function submitBookingRequest(data: {
       return { success: false, error: "Invalid mobile number. Must contain 10-15 digits." };
     }
 
-    // Check departure availability and allocate seats
+    // Check departure availability and allocate seats based on class
     const { data: departure } = await supabaseServer
       .from("tour_departures")
       .select("*")
@@ -810,23 +817,50 @@ export async function submitBookingRequest(data: {
       .eq("departure_date", data.travelDate)
       .maybeSingle();
 
+    let targetTotalField = "total_seats";
+    let targetBookedField = "booked_seats";
+    
+    if (data.travelClass === "Sleeper (SL)") { targetTotalField = "sl_total_seats"; targetBookedField = "sl_booked_seats"; }
+    else if (data.travelClass === "3AC") { targetTotalField = "ac3_total_seats"; targetBookedField = "ac3_booked_seats"; }
+    else if (data.travelClass === "2AC") { targetTotalField = "ac2_total_seats"; targetBookedField = "ac2_booked_seats"; }
+    else if (data.travelClass === "Flight") { targetTotalField = "flight_total_seats"; targetBookedField = "flight_booked_seats"; }
+
     if (departure) {
-      if (departure.available_seats < data.numberOfTravellers) {
-        return { success: false, error: `Seats fully booked. Only ${departure.available_seats} seat(s) remaining for this date.` };
+      const classTotal = departure[targetTotalField] || 0;
+      const classBooked = departure[targetBookedField] || 0;
+      const classAvailable = classTotal - classBooked;
+
+      // Also track overall totals to maintain backward compatibility
+      const overallTotal = departure.total_seats || 0;
+      const overallBooked = departure.booked_seats || 0;
+      const overallAvailable = overallTotal - overallBooked;
+
+      if (classTotal > 0 && classAvailable < data.numberOfTravellers) {
+        return { success: false, error: `Seats fully booked for ${data.travelClass || 'selected class'}. Only ${classAvailable} seat(s) remaining for this date.` };
+      } else if (classTotal === 0 && overallAvailable < data.numberOfTravellers) {
+        // Fallback to overall seats if specific class seats are not configured
+        return { success: false, error: `Seats fully booked. Only ${overallAvailable} seat(s) remaining for this date.` };
       }
       
-      const newBooked = departure.booked_seats + data.numberOfTravellers;
-      const newAvailable = departure.total_seats - newBooked;
-      const newStatus = newAvailable === 0 ? "Sold Out" : departure.status;
+      const newClassBooked = classBooked + data.numberOfTravellers;
+      const newOverallBooked = overallBooked + data.numberOfTravellers;
+      const newOverallAvailable = overallTotal - newOverallBooked;
+      const newStatus = newOverallAvailable <= 0 ? "Sold Out" : departure.status;
+      
+      const updatePayload: any = {
+        booked_seats: newOverallBooked,
+        available_seats: newOverallAvailable,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (classTotal > 0) {
+        updatePayload[targetBookedField] = newClassBooked;
+      }
       
       const { error: depUpdateError } = await supabaseServer
         .from("tour_departures")
-        .update({
-          booked_seats: newBooked,
-          available_seats: newAvailable,
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq("id", departure.id);
         
       if (depUpdateError) {
@@ -834,22 +868,29 @@ export async function submitBookingRequest(data: {
         return { success: false, error: "Failed to allocate seats for this booking." };
       }
     } else {
-      // Auto-schedule default departure with 40 seats
+      // Auto-schedule default departure with generic 40 seats
       const totalSeats = 40;
       const bookedSeats = data.numberOfTravellers;
       const availableSeats = totalSeats - bookedSeats;
       
+      const insertPayload: any = {
+        package_id: data.packageId || null,
+        package_name: data.packageName,
+        departure_date: data.travelDate,
+        total_seats: totalSeats,
+        booked_seats: bookedSeats,
+        available_seats: availableSeats,
+        status: availableSeats === 0 ? "Sold Out" : "Open"
+      };
+
+      if (data.travelClass) {
+        insertPayload[targetTotalField] = totalSeats;
+        insertPayload[targetBookedField] = bookedSeats;
+      }
+      
       const { error: depInsertError } = await supabaseServer
         .from("tour_departures")
-        .insert({
-          package_id: data.packageId || null,
-          package_name: data.packageName,
-          departure_date: data.travelDate,
-          total_seats: totalSeats,
-          booked_seats: bookedSeats,
-          available_seats: availableSeats,
-          status: availableSeats === 0 ? "Sold Out" : "Open"
-        });
+        .insert(insertPayload);
         
       if (depInsertError) {
         console.warn("Failed to auto-create tour departure:", depInsertError);
@@ -869,8 +910,14 @@ export async function submitBookingRequest(data: {
         boarding_point: data.boardingPoint,
         number_of_travellers: data.numberOfTravellers,
         special_requirements: data.specialRequirements || null,
-        booking_amount: 5000.00 * data.numberOfTravellers, // Example dynamic amount calculation, advance set to 5000
-        advance_amount: 5000.00,
+        booking_amount: data.packageCost || (5000.00 * data.numberOfTravellers),
+        advance_amount: data.advanceAmount || 5000.00,
+        package_cost: data.packageCost || 0,
+        balance_amount: data.balanceAmount || 0,
+        travel_class: data.travelClass || null,
+        hotel_category: data.hotelCategory || null,
+        meal_category: data.mealCategory || null,
+        transport_category: data.transportCategory || null,
         payment_status: "Unpaid",
         booking_status: "Pending",
         source: data.source || "Direct",
@@ -1977,4 +2024,152 @@ export async function getDepartureBookings(packageName: string, departureDate: s
 }
 
 
+// ==========================================
+// FARES MANAGEMENT SYSTEM ACTIONS
+// ==========================================
 
+export async function getFaresData() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { data, error } = await supabaseServer
+      .from("package_fares")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching fares:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Error fetching fares:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function createFare(data: any) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("package_fares")
+      .insert({
+        package_name: data.package_name,
+        sl_fare: data.sl_fare || 0,
+        ac3_extra_charge: data.ac3_extra_charge || 0,
+        ac2_extra_charge: data.ac2_extra_charge || 0,
+        flight_fare: data.flight_fare || 0,
+        sl_services: data.sl_services || { hotel: "Standard", meals: "Basic", transport: "Shared Vehicle", support: "Normal" },
+        ac3_services: data.ac3_services || { hotel: "Deluxe", meals: "Standard", transport: "AC Vehicle", support: "Priority" },
+        ac2_services: data.ac2_services || { hotel: "Premium", meals: "Premium", transport: "AC Deluxe Vehicle", support: "Priority" },
+        flight_services: data.flight_services || { hotel: "Luxury", meals: "Premium", transport: "Premium Vehicle", support: "VIP" },
+        is_active: data.is_active !== undefined ? data.is_active : true,
+      });
+
+    if (error) {
+      console.error("Error creating fare:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in createFare:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateFare(id: number, data: any) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("package_fares")
+      .update({
+        package_name: data.package_name,
+        sl_fare: data.sl_fare,
+        ac3_extra_charge: data.ac3_extra_charge,
+        ac2_extra_charge: data.ac2_extra_charge,
+        flight_fare: data.flight_fare,
+        sl_services: data.sl_services,
+        ac3_services: data.ac3_services,
+        ac2_services: data.ac2_services,
+        flight_services: data.flight_services,
+        is_active: data.is_active,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating fare:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in updateFare:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function toggleFareStatus(id: number, isActive: boolean) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("package_fares")
+      .update({
+        is_active: isActive,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error toggling fare status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in toggleFareStatus:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getPublicFares(packageName: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from("package_fares")
+      .select("*")
+      .eq("package_name", packageName)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching public fare:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Error in getPublicFares:", err);
+    return { success: false, error: err.message };
+  }
+}

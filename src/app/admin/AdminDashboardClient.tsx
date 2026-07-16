@@ -7,6 +7,7 @@ import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag,
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { logoutAdmin, deletePackage } from "./actions";
+import FaresClient from "./fares/FaresClient";
 
 interface AdminDashboardClientProps {
   initialPackages: any[];
@@ -21,7 +22,7 @@ interface AnalyticsData {
 
 export default function AdminDashboardClient({ initialPackages }: AdminDashboardClientProps) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "bookings" | "leads" | "cancellations" | "departures">("packages");
+  const [activeTab, setActiveTab] = useState<"packages" | "analytics" | "bookings" | "leads" | "cancellations" | "departures" | "fares">("packages");
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1073,6 +1074,14 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
             >
               Departures
             </button>
+            <button
+              onClick={() => setActiveTab("fares")}
+              className={`pb-3 font-extrabold text-sm uppercase tracking-wider transition duration-150 border-b-2 ${
+                activeTab === "fares" ? "border-[#d4af37] text-white" : "border-transparent text-white/50 hover:text-white"
+              }`}
+            >
+              Fares
+            </button>
           </div>
         </div>
 
@@ -1331,7 +1340,26 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                     </div>
                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Revenue</span>
-                      <span className="text-2xl font-black text-slate-700 mt-1">₹{bookings.filter((booking) => booking.payment_status !== "Paid" && booking.payment_status !== "Payment Received" && booking.payment_status !== "Refunded").reduce((sum, booking) => sum + Number(booking.advance_amount || 0), 0).toLocaleString("en-IN")}</span>
+                      <span className="text-2xl font-black text-slate-700 mt-1">₹{bookings.filter((booking) => booking.payment_status !== "Paid" && booking.payment_status !== "Payment Received" && booking.payment_status !== "Refunded").reduce((sum, booking) => sum + Number(booking.balance_amount || booking.advance_amount || 0), 0).toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Sleeper (SL) Bookings</span>
+                      <span className="text-2xl font-black text-indigo-700 mt-1">{bookings.filter((booking) => booking.travel_class === "Sleeper (SL)").length}</span>
+                    </div>
+                    <div className="bg-teal-50 p-5 rounded-2xl border border-teal-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider">3AC Bookings</span>
+                      <span className="text-2xl font-black text-teal-700 mt-1">{bookings.filter((booking) => booking.travel_class === "3AC").length}</span>
+                    </div>
+                    <div className="bg-cyan-50 p-5 rounded-2xl border border-cyan-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">2AC Bookings</span>
+                      <span className="text-2xl font-black text-cyan-700 mt-1">{bookings.filter((booking) => booking.travel_class === "2AC").length}</span>
+                    </div>
+                    <div className="bg-sky-50 p-5 rounded-2xl border border-sky-100 shadow-sm flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">Flight Bookings</span>
+                      <span className="text-2xl font-black text-sky-700 mt-1">{bookings.filter((booking) => booking.travel_class === "Flight").length}</span>
                     </div>
                   </div>
 
@@ -1421,6 +1449,7 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                             <th className="p-4">Booking ID</th>
                             <th className="p-4">Customer</th>
                             <th className="p-4">Package</th>
+                            <th className="p-4">Class & Cost</th>
                             <th className="p-4">Travel</th>
                             <th className="p-4">Booking Status</th>
                             <th className="p-4">Payment Status</th>
@@ -1452,6 +1481,13 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                     <span className="font-semibold text-slate-700">{booking.package_name}</span>
                                     <span className="text-slate-500">👥 {booking.number_of_travellers} Travellers</span>
                                     <span className="text-slate-500">📍 {booking.boarding_point}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-bold text-[#0b1c3e]">{booking.travel_class || "Not Specified"}</span>
+                                    <span className="text-slate-500 text-xs">Total: ₹{Number(booking.package_cost || booking.booking_amount || 0).toLocaleString("en-IN")}</span>
+                                    <span className="text-slate-400 text-[10px]">Bal: ₹{Number(booking.balance_amount || 0).toLocaleString("en-IN")}</span>
                                   </div>
                                 </td>
                                 <td className="p-4">
@@ -2078,7 +2114,7 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                 </>
               )}
             </div>
-          ) : (
+          ) : activeTab === "departures" ? (
             <div className="flex flex-col gap-8">
               {loadingDepartures ? (
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-xl py-24 text-center">
@@ -2282,7 +2318,11 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                 </>
               )}
             </div>
-          )}
+          ) : activeTab === "fares" ? (
+            <div className="-mt-12 -mx-6">
+              <FaresClient isEmbedded={true} />
+            </div>
+          ) : null}
 
           {/* Create Departure Modal */}
           {showCreateModal && (

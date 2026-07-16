@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, Copy, Upload, ArrowRight, ShieldCheck, Download } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { submitBookingRequest, submitBookingPayment } from "@/app/admin/actions";
+import { submitBookingRequest, submitBookingPayment, getPublicFares } from "@/app/admin/actions";
 
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
@@ -23,11 +23,16 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     phone: "",
     email: "",
     package: "",
+    travelClass: "",
     date: "",
     guests: "1",
     specialRequirements: "",
     termsAccepted: false
   });
+
+  const [fareRule, setFareRule] = useState<any>(null);
+  const [packageCost, setPackageCost] = useState(0);
+  const [balanceAmount, setBalanceAmount] = useState(0);
 
   // Step 2 Form Data
   const [transactionId, setTransactionId] = useState("");
@@ -48,6 +53,43 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       setFormData(prev => ({ ...prev, package: prev.package?.trim() || packages[0].title }));
     }
   }, [packageParam, packages]);
+
+  useEffect(() => {
+    async function loadFares() {
+      if (formData.package) {
+        const res = await getPublicFares(formData.package);
+        if (res.success && res.data) {
+          setFareRule(res.data);
+          if (!formData.travelClass) {
+            setFormData(prev => ({ ...prev, travelClass: "Sleeper (SL)" }));
+          }
+        } else {
+          setFareRule(null);
+        }
+      }
+    }
+    loadFares();
+  }, [formData.package]);
+
+  useEffect(() => {
+    if (fareRule && formData.travelClass) {
+      let baseCost = 0;
+      if (formData.travelClass === "Sleeper (SL)") baseCost = fareRule.sl_fare;
+      if (formData.travelClass === "3AC") baseCost = fareRule.sl_fare + fareRule.ac3_extra_charge;
+      if (formData.travelClass === "2AC") baseCost = fareRule.sl_fare + fareRule.ac2_extra_charge;
+      if (formData.travelClass === "Flight") baseCost = fareRule.flight_fare;
+      
+      const totalCost = baseCost * (parseInt(formData.guests) || 1);
+      const adv = 5000 * (parseInt(formData.guests) || 1);
+      setPackageCost(totalCost);
+      setAdvanceAmount(adv);
+      setBalanceAmount(totalCost - adv);
+    } else {
+      setAdvanceAmount(5000 * (parseInt(formData.guests) || 1));
+      setPackageCost(0);
+      setBalanceAmount(0);
+    }
+  }, [fareRule, formData.travelClass, formData.guests]);
 
   // Handle Step 1 details submission
   const handleDetailsSubmit = async (e: React.FormEvent) => {
@@ -80,13 +122,16 @@ function BookingFormContent({ packages }: { packages: any[] }) {
         numberOfTravellers: parseInt(formData.guests) || 1,
         specialRequirements: formData.specialRequirements.trim() || undefined,
         source: "booking_crm_form",
-        pageUrl: window.location.href
+        pageUrl: window.location.href,
+        travelClass: formData.travelClass || undefined,
+        packageCost: packageCost || undefined,
+        advanceAmount: advanceAmount || undefined,
+        balanceAmount: balanceAmount || undefined
       });
 
       if (res.success && res.id && res.booking_reference) {
         setBookingId(res.id);
         setBookingRef(res.booking_reference);
-        setAdvanceAmount(res.advance_amount || 5000);
         setStep(2);
       } else {
         alert("Failed to submit request: " + (res.error || "Please try again."));
@@ -157,8 +202,20 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               <span class="value">${formData.guests} Pax</span>
             </div>
             <div class="row">
+              <span class="label">Travel Class:</span>
+              <span class="value">${formData.travelClass || "Standard"}</span>
+            </div>
+            <div class="row">
+              <span class="label">Total Package Cost:</span>
+              <span class="value">₹${packageCost.toLocaleString("en-IN")}</span>
+            </div>
+            <div class="row">
               <span class="label">Advance Amount Received:</span>
               <span class="value" style="color: #b8952d; font-size: 16px;">₹${advanceAmount.toLocaleString("en-IN")}</span>
+            </div>
+            <div class="row">
+              <span class="label">Balance Due:</span>
+              <span class="value" style="color: #e24343;">₹${balanceAmount.toLocaleString("en-IN")}</span>
             </div>
             <div class="row">
               <span class="label">Payment Verification Status:</span>
@@ -254,10 +311,12 @@ function BookingFormContent({ packages }: { packages: any[] }) {
             <h2 className="text-2xl font-extrabold text-[#0b1c3e] mb-2">Configure Your Journey</h2>
             <p className="text-xs text-slate-400 mb-4">Provide travel specifications to generate your unique booking request record.</p>
 
-            <div className="bg-[#0b1c3e]/5 border border-[#0b1c3e]/10 p-4 rounded-xl flex justify-between items-center text-xs">
-              <span className="font-bold text-[#0b1c3e]">Advance Booking Amount:</span>
-              <strong className="text-sm font-extrabold text-[#d4af37]">₹5,000 (Advance token deposit)</strong>
-            </div>
+            {!fareRule && (
+              <div className="bg-[#0b1c3e]/5 border border-[#0b1c3e]/10 p-4 rounded-xl flex justify-between items-center text-xs">
+                <span className="font-bold text-[#0b1c3e]">Advance Booking Amount:</span>
+                <strong className="text-sm font-extrabold text-[#d4af37]">₹5,000 (Advance token deposit)</strong>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
@@ -337,6 +396,35 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               </div>
             </div>
 
+            {fareRule && (
+              <div className="flex flex-col gap-3">
+                <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1.5">Choose Travel Category</label>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {['Sleeper (SL)', '3AC', '2AC', 'Flight'].map(cls => {
+                    let cost = 0;
+                    if (cls === 'Sleeper (SL)') cost = fareRule.sl_fare;
+                    if (cls === '3AC') cost = fareRule.sl_fare + fareRule.ac3_extra_charge;
+                    if (cls === '2AC') cost = fareRule.sl_fare + fareRule.ac2_extra_charge;
+                    if (cls === 'Flight') cost = fareRule.flight_fare;
+                    
+                    if (cost === 0) return null;
+                    
+                    const isSelected = formData.travelClass === cls;
+                    return (
+                      <div 
+                        key={cls}
+                        onClick={() => setFormData({...formData, travelClass: cls})}
+                        className={`p-4 rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-slate-200 hover:border-[#0b1c3e]/30'}`}
+                      >
+                        <h4 className={`font-bold ${isSelected ? 'text-[#0b1c3e]' : 'text-slate-600'}`}>{cls}</h4>
+                        <p className={`text-sm mt-1 font-extrabold ${isSelected ? 'text-[#d4af37]' : 'text-slate-400'}`}>₹{cost.toLocaleString("en-IN")}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
               <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-slate-400" /> Special Requirements (Optional)</label>
               <textarea
@@ -361,6 +449,36 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               </label>
             </div>
 
+            {fareRule && formData.travelClass && (
+              <div className="bg-gradient-to-r from-[#0b1c3e]/5 to-transparent border border-[#0b1c3e]/10 p-5 rounded-2xl flex flex-col gap-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#d4af37]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                <h4 className="font-bold text-[#0b1c3e] flex items-center gap-2 pb-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  Live Fare Summary
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Base Package Cost ({formData.guests} Pax)</span>
+                      <span className="font-bold text-slate-800">₹{packageCost.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Advance Token Deposit</span>
+                      <span className="font-bold text-emerald-600">₹{advanceAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 md:border-l border-slate-200 md:pl-4 justify-center">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[#0b1c3e] font-extrabold">Balance Due</span>
+                      <span className="font-extrabold text-rose-500 text-base">₹{balanceAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                    <span className="text-[9px] text-slate-400">Balance is payable before departure.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button 
               type="submit" 
               disabled={isSubmitting} 
@@ -379,10 +497,25 @@ function BookingFormContent({ packages }: { packages: any[] }) {
                 <span>BOOKING REFERENCE:</span>
                 <span className="text-[#0b1c3e]">{bookingRef}</span>
               </div>
+              
+              {packageCost > 0 && (
+                <div className="flex justify-between items-center border-t border-slate-200/50 pt-3">
+                  <span className="text-sm font-bold text-[#0b1c3e]">Total Package Cost:</span>
+                  <strong className="text-sm font-extrabold text-[#0b1c3e]">₹{packageCost.toLocaleString("en-IN")}</strong>
+                </div>
+              )}
+              
               <div className="flex justify-between items-center border-t border-slate-200/50 pt-3">
                 <span className="text-sm font-bold text-[#0b1c3e]">Advance Booking Amount:</span>
                 <strong className="text-xl font-extrabold text-[#d4af37]">₹{advanceAmount.toLocaleString("en-IN")}</strong>
               </div>
+              
+              {balanceAmount > 0 && (
+                <div className="flex justify-between items-center border-t border-slate-200/50 pt-3">
+                  <span className="text-sm font-bold text-rose-500">Balance Due:</span>
+                  <strong className="text-sm font-extrabold text-rose-500">₹{balanceAmount.toLocaleString("en-IN")}</strong>
+                </div>
+              )}
             </div>
 
             <h3 className="text-lg font-bold text-[#0b1c3e] border-l-4 border-[#d4af37] pl-3">UPI Payment Instructions</h3>
