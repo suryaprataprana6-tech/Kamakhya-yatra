@@ -2173,3 +2173,16 @@ export async function getPublicFares(packageName: string) {
     return { success: false, error: err.message };
   }
 }
+
+export async function getActivePackages() {
+  try {
+    const { data, error } = await supabaseServer
+      .from('packages')
+      .select('id, title')
+      .order('title', { ascending: true });
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}

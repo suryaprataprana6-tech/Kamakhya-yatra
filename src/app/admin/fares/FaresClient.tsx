@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, CheckCircle, XCircle, RefreshCw } from "lucide-react";
-import { getFaresData, createFare, updateFare, toggleFareStatus } from "@/app/admin/actions";
+import { getFaresData, createFare, updateFare, toggleFareStatus, getActivePackages } from "@/app/admin/actions";
 
 export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [fares, setFares] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -18,6 +19,7 @@ export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boole
   };
 
   const [formData, setFormData] = useState({
+    package_id: null as number | null,
     package_name: "",
     sl_fare: 0,
     ac3_extra_charge: 0,
@@ -38,8 +40,37 @@ export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boole
   };
 
   useEffect(() => {
-    fetchFares();
+    const init = async () => {
+      fetchFares();
+      const pkgRes = await getActivePackages();
+      if (pkgRes.success) setPackages(pkgRes.data || []);
+    };
+    init();
   }, []);
+
+  const handlePackageSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedPkgName = e.target.value;
+    if (!selectedPkgName) {
+      setFormData(prev => ({ ...prev, package_name: "", package_id: null }));
+      return;
+    }
+
+    const selectedPkg = packages.find(p => p.title === selectedPkgName);
+    
+    // Duplicate Check
+    const existingFare = fares.find(f => f.package_name === selectedPkgName || (selectedPkg && f.package_id === selectedPkg.id));
+    
+    if (existingFare && !isEditing) {
+      alert("Fare rule already exists for this package.");
+      editFare(existingFare);
+    } else {
+      setFormData(prev => ({ 
+        ...prev, 
+        package_name: selectedPkgName, 
+        package_id: selectedPkg ? selectedPkg.id : null 
+      }));
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -83,6 +114,7 @@ export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boole
 
   const editFare = (fare: any) => {
     setFormData({
+      package_id: fare.package_id || null,
       package_name: fare.package_name,
       sl_fare: fare.sl_fare,
       ac3_extra_charge: fare.ac3_extra_charge,
@@ -106,6 +138,7 @@ export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boole
 
   const resetForm = () => {
     setFormData({
+      package_id: null,
       package_name: "",
       sl_fare: 0,
       ac3_extra_charge: 0,
@@ -140,16 +173,23 @@ export default function FaresClient({ isEmbedded = false }: { isEmbedded?: boole
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-slate-700">Package Name</label>
-                <input
-                  type="text"
-                  name="package_name"
-                  value={formData.package_name}
-                  onChange={handleInputChange}
-                  placeholder="e.g. Amarnath Yatra"
+                <label className="text-xs font-bold text-[#0b1c3e] uppercase">Package Name <span className="text-rose-500">*</span></label>
+                <select
                   required
-                  className="p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#d4af37] focus:outline-none"
-                />
+                  value={formData.package_name}
+                  onChange={handlePackageSelect}
+                  disabled={isEditing}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#d4af37] text-sm text-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  <option value="" disabled>Select Tour Package</option>
+                  {packages.map(pkg => (
+                    <option key={pkg.id} value={pkg.title}>{pkg.title}</option>
+                  ))}
+                  {isEditing && !packages.find(p => p.title === formData.package_name) && (
+                    <option value={formData.package_name}>{formData.package_name}</option>
+                  )}
+                </select>
+                {isEditing && <span className="text-[10px] text-slate-400 font-semibold">Package cannot be changed during edit.</span>}
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-4">
