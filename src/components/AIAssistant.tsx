@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, X, MessageCircle, Sparkles, Bot } from "lucide-react";
 import Image from "next/image";
+import { searchPackagesForAI } from "@/app/admin/actions";
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    KNOWLEDGE BASE — All FAQ answers, package info, and Kamakhya details
@@ -147,6 +148,99 @@ async function getAIResponse(userMsg: string, _history: Message[]): Promise<stri
   await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
 
   const lower = userMsg.toLowerCase();
+
+  // Dynamic Intent Detection for Itinerary Search
+  const intentKeywords = ["itinerary", "tour plan", "package details", "schedule", "day wise", "trip plan", "package", "tour"];
+  const matchedIntent = intentKeywords.find(k => lower.includes(k));
+  if (matchedIntent) {
+    console.log("User Query:", userMsg);
+    console.log("Detected Intent:", matchedIntent);
+    
+    // Clean query by removing intent words
+    let searchQuery = lower;
+    intentKeywords.forEach(k => {
+      searchQuery = searchQuery.replace(new RegExp(`\\b${k}\\b`, 'gi'), '');
+    });
+    // Remove extra words like "show", "me", "for"
+    searchQuery = searchQuery.replace(/\b(show|me|for|a|an|the)\b/gi, '').trim();
+
+    console.log("Searching Package:", searchQuery);
+
+    if (searchQuery.length > 2) {
+      try {
+        const matchedPackages = await searchPackagesForAI(searchQuery);
+        
+        if (matchedPackages && matchedPackages.length > 0) {
+          console.log("Matched Packages Count:", matchedPackages.length);
+          console.log("Matched Package Name:", matchedPackages[0].title);
+          
+          let debugOutput = `\n\n[DEBUG]\nIntent: ${matchedIntent}\nKeyword: ${searchQuery}\nPackages Found: ${matchedPackages.length}`;
+
+          if (matchedPackages.length === 1) {
+            const pkg = matchedPackages[0];
+            let response = `🏷 **Package Name:** ${pkg.title}\n`;
+            response += `🕒 **Duration:** ${pkg.duration || "Customizable"}\n\n`;
+            
+            if (pkg.itinerary && Array.isArray(pkg.itinerary) && pkg.itinerary.length > 0) {
+              pkg.itinerary.forEach((day: any, idx: number) => {
+                const title = day.title || day.activity || day.description || "Activity";
+                const details = day.details ? `\n${day.details}` : "";
+                response += `📅 **Day ${idx + 1}:**\n**${title}**${details}\n\n`;
+              });
+            } else {
+              response += `*Day-wise itinerary is currently being updated. Please contact our travel advisor.*\n\n`;
+            }
+
+            // Pricing logic
+            response += `💰 **Pricing:**\n`;
+            if (pkg.fares) {
+              if (pkg.fares.sl_fare) response += `Sleeper: ₹${pkg.fares.sl_fare.toLocaleString("en-IN")}\n`;
+              if (pkg.fares.ac3_extra_charge) response += `3AC: ₹${(pkg.fares.sl_fare + pkg.fares.ac3_extra_charge).toLocaleString("en-IN")}\n`;
+              if (pkg.fares.ac2_extra_charge) response += `2AC: ₹${(pkg.fares.sl_fare + pkg.fares.ac2_extra_charge).toLocaleString("en-IN")}\n`;
+              if (pkg.fares.flight_fare) response += `Flight: ₹${pkg.fares.flight_fare.toLocaleString("en-IN")}\n`;
+            } else if (pkg.price) {
+              response += `Base Price: ₹${pkg.price.toLocaleString("en-IN")}\n`;
+            }
+            response += `\n`;
+
+            if (pkg.whats_included && Array.isArray(pkg.whats_included) && pkg.whats_included.length > 0) {
+               response += `✅ **Inclusions:**\n`;
+               pkg.whats_included.forEach((item: string) => {
+                 response += `- ${item}\n`;
+               });
+               response += `\n`;
+            }
+
+            const exclusions = pkg.exclusions || pkg.whats_excluded || [];
+            if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
+               response += `❌ **Exclusions:**\n`;
+               exclusions.forEach((item: string) => {
+                 response += `- ${item}\n`;
+               });
+               response += `\n`;
+            } else {
+               response += `❌ **Exclusions:**\n- Personal Expenses\n- Train/Flight Meals\n- Anything not mentioned in Inclusions\n\n`;
+            }
+            
+            response += `📞 **Kamakhya Yatra**\n7079044000 | 7079088000\n`;
+            response += debugOutput;
+            return response;
+          } else {
+            // Multiple matches
+            let response = `I found multiple packages matching your request. Which one would you like to see?\n\n`;
+            matchedPackages.forEach((pkg: any) => {
+               response += `• **${pkg.title}** (${pkg.duration || ''})\n`;
+            });
+            response += `\nPlease reply with the specific package name.`;
+            response += debugOutput;
+            return response;
+          }
+        }
+      } catch (err) {
+        console.error("AI Search Error:", err);
+      }
+    }
+  }
 
   // Check knowledge base for pattern matches
   for (const entry of FAQ_KNOWLEDGE) {

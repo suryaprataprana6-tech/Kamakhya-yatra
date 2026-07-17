@@ -2242,3 +2242,41 @@ export async function getActivePackages() {
     return { success: false, error: err.message };
   }
 }
+
+export async function searchPackagesForAI(query: string) {
+  try {
+    const searchPattern = `%${query}%`;
+    const { data: packages, error } = await supabaseServer
+      .from("packages")
+      .select("*")
+      .or(`title.ilike.${searchPattern},location.ilike.${searchPattern},slug.ilike.${searchPattern}`);
+
+    if (error) {
+      console.error("AI Package Search Error:", error);
+      return [];
+    }
+    
+    if (!packages || packages.length === 0) return [];
+
+    // Fetch fares for matched packages
+    const packageIds = packages.map(p => p.id);
+    const { data: fares } = await supabaseServer
+      .from("package_fares")
+      .select("*")
+      .in("package_id", packageIds);
+
+    const enrichedPackages = packages.map(pkg => {
+      const fare = fares?.find(f => f.package_id === pkg.id);
+      return {
+        ...pkg,
+        fares: fare || null
+      };
+    });
+
+    return enrichedPackages;
+  } catch (err) {
+    console.error("AI Package Search Exception:", err);
+    return [];
+  }
+}
+
