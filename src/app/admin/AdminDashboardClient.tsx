@@ -18,6 +18,10 @@ interface AnalyticsData {
   todayPageViews: number;
   topPages: { path: string; count: number }[];
   visitsChart: { label: string; count: number }[];
+  totalBookingValue?: number;
+  totalAdvanceCollected?: number;
+  pendingBalanceAmount?: number;
+  confirmedBookings?: number;
 }
 
 export default function AdminDashboardClient({ initialPackages }: AdminDashboardClientProps) {
@@ -1232,7 +1236,31 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                 </div>
               ) : (
                 <>
-                  {/* Grid cards */}
+                  {/* Financial & Booking Metrics */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Booking Value</span>
+                      <span className="text-2xl font-black text-[#0b1c3e]">₹{(analytics?.totalBookingValue || 0).toLocaleString("en-IN")}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">Gross package cost (active bookings)</span>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Advance Collected</span>
+                      <span className="text-2xl font-black text-emerald-600">₹{(analytics?.totalAdvanceCollected || 0).toLocaleString("en-IN")}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">Initial tokens collected</span>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Balance</span>
+                      <span className="text-2xl font-black text-rose-600">₹{(analytics?.pendingBalanceAmount || 0).toLocaleString("en-IN")}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">Amount to be recovered</span>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirmed Bookings</span>
+                      <span className="text-2xl font-black text-[#0b1c3e]">{analytics?.confirmedBookings || 0}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">Confirmed / Completed</span>
+                    </div>
+                  </div>
+
+                  {/* Traffic Grid cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Live Counter */}
                     <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-lg flex items-center justify-between">
@@ -1383,10 +1411,10 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                       >
                         <option value="all">All Booking Statuses</option>
                         <option value="Pending">Pending</option>
-                        <option value="Contacted">Contacted</option>
-                        <option value="Payment Awaiting">Payment Awaiting</option>
+                        <option value="Pending Payment">Pending Payment</option>
                         <option value="Payment Received">Payment Received</option>
                         <option value="Confirmed">Confirmed</option>
+                        <option value="Balance Pending">Balance Pending</option>
                         <option value="Completed">Completed</option>
                         <option value="Cancelled">Cancelled</option>
                       </select>
@@ -1467,12 +1495,28 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                   <div className="flex flex-col gap-1">
                                     <span>{booking.booking_reference}</span>
                                     <span className="text-[10px] text-slate-400">ID #{booking.id}</span>
+                                    {booking.booking_status === "Confirmed" && Number(booking.balance_amount) > 0 && (
+                                      <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                                        Balance Payment Pending
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="p-4">
                                   <div className="flex flex-col gap-1">
                                     <span className="font-extrabold text-slate-800 text-sm">{booking.customer_name}</span>
-                                    <span className="text-slate-500">📞 {booking.phone}</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-slate-500">📞 {booking.phone}</span>
+                                      <a 
+                                        href={`https://wa.me/${booking.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Namaste ${booking.customer_name}, your booking request for ${booking.package_name} is under review. Please complete any pending payments if not done yet.`)}`} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="text-[#25D366] hover:opacity-80 ml-1"
+                                        title="Message on WhatsApp"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/></svg>
+                                      </a>
+                                    </div>
                                     <span className="text-slate-400 text-[11px]">{booking.email}</span>
                                   </div>
                                 </td>
@@ -1503,10 +1547,10 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                     className="w-full text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer bg-slate-50 text-slate-700"
                                   >
                                     <option value="Pending">Pending</option>
-                                    <option value="Contacted">Contacted</option>
-                                    <option value="Payment Awaiting">Payment Awaiting</option>
+                                    <option value="Pending Payment">Pending Payment</option>
                                     <option value="Payment Received">Payment Received</option>
                                     <option value="Confirmed">Confirmed</option>
+                                    <option value="Balance Pending">Balance Pending</option>
                                     <option value="Completed">Completed</option>
                                     <option value="Cancelled">Cancelled</option>
                                   </select>

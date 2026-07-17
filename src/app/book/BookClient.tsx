@@ -15,6 +15,17 @@ function BookingFormContent({ packages }: { packages: any[] }) {
   const [step, setStep] = useState(1); // 1: Details, 2: Payment, 3: Success
   const [bookingId, setBookingId] = useState<number | null>(null);
   const [bookingRef, setBookingRef] = useState("");
+
+  const getDepositAmount = (category: string) => {
+    if (!category) return 5000;
+    const normalized = category.toLowerCase();
+    if (normalized.includes("sleeper") || normalized.includes("sl")) return 5000;
+    if (normalized.includes("3ac")) return 10000;
+    if (normalized.includes("2ac")) return 12000;
+    if (normalized.includes("flight")) return 25000;
+    return 5000;
+  };
+
   const [advanceAmount, setAdvanceAmount] = useState(5000);
 
   // Step 1 Form Data
@@ -72,6 +83,13 @@ function BookingFormContent({ packages }: { packages: any[] }) {
   }, [formData.package]);
 
   useEffect(() => {
+    const guestsCount = parseInt(formData.guests) || 1;
+    let baseDeposit = 5000;
+    
+    if (formData.travelClass) {
+      baseDeposit = getDepositAmount(formData.travelClass);
+    }
+
     if (fareRule && formData.travelClass) {
       let baseCost = 0;
       if (formData.travelClass === "Sleeper (SL)") baseCost = fareRule.sl_fare;
@@ -79,13 +97,18 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       if (formData.travelClass === "2AC") baseCost = fareRule.sl_fare + fareRule.ac2_extra_charge;
       if (formData.travelClass === "Flight") baseCost = fareRule.flight_fare;
       
-      const totalCost = baseCost * (parseInt(formData.guests) || 1);
-      const adv = 5000 * (parseInt(formData.guests) || 1);
+      const totalCost = baseCost * guestsCount;
+      const rawAdv = baseDeposit * guestsCount;
+      
+      // Ensure advance doesn't exceed total cost and balance is never negative
+      const adv = Math.min(rawAdv, totalCost);
+      const bal = Math.max(0, totalCost - adv);
+      
       setPackageCost(totalCost);
       setAdvanceAmount(adv);
-      setBalanceAmount(totalCost - adv);
+      setBalanceAmount(bal);
     } else {
-      setAdvanceAmount(5000 * (parseInt(formData.guests) || 1));
+      setAdvanceAmount(baseDeposit * guestsCount);
       setPackageCost(0);
       setBalanceAmount(0);
     }
@@ -96,8 +119,24 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     e.preventDefault();
 
     const normalizedPackageName = formData.package?.trim() || packages[0]?.title || "Custom Plan";
-    if (!formData.name.trim() || !formData.phone.trim() || !formData.email.trim() || !formData.date || !formData.termsAccepted) {
-      alert("Please fill all required fields and accept the Terms & Conditions.");
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.email.trim() || !formData.date) {
+      alert("Please fill all required fields.");
+      return;
+    }
+    
+    if (fareRule && !formData.travelClass) {
+      alert("Please select a Travel Category.");
+      return;
+    }
+
+    if (!formData.termsAccepted) {
+      alert("Please accept the Terms & Conditions to proceed.");
+      return;
+    }
+
+    const guests = parseInt(formData.guests);
+    if (isNaN(guests) || guests < 1) {
+      alert("Passenger count must be at least 1.");
       return;
     }
 
@@ -272,7 +311,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               <span class="value" style="color: #059669; font-size: 16px;">₹${advanceAmount.toLocaleString("en-IN")}</span>
             </div>
             <div class="row row-full">
-              <span class="label">Balance Due</span>
+              <span class="label">Balance Payable Before Departure</span>
               <span class="value" style="color: #e11d48; font-size: 16px;">₹${balanceAmount.toLocaleString("en-IN")}</span>
             </div>
 
@@ -386,7 +425,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
             {!fareRule && (
               <div className="bg-[#0b1c3e]/5 border border-[#0b1c3e]/10 p-4 rounded-xl flex justify-between items-center text-xs">
                 <span className="font-bold text-[#0b1c3e]">Advance Booking Amount:</span>
-                <strong className="text-sm font-extrabold text-[#d4af37]">₹5,000 (Advance token deposit)</strong>
+                <strong className="text-sm font-extrabold text-[#d4af37]">₹{advanceAmount.toLocaleString("en-IN")} (Advance token deposit)</strong>
               </div>
             )}
 
@@ -493,6 +532,9 @@ function BookingFormContent({ packages }: { packages: any[] }) {
                       </div>
                     )
                   })}
+                </div>
+                <div className="text-[10px] font-bold text-slate-500 bg-slate-50 p-2 rounded-lg text-center mt-2 border border-slate-100">
+                  Advance Booking Amount: Sleeper ₹5,000 | 3AC ₹10,000 | 2AC ₹12,000 | Flight ₹25,000
                 </div>
               </div>
             )}
@@ -753,7 +795,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
           <ul className="flex flex-col gap-5 text-sm">
             <li>
               <strong className="block text-[#0b1c3e] mb-1 font-bold">1. Advance Payment Setup</strong>
-              <span className="text-slate-500">Every luxury tour requires a minimum ₹5,000 per booking request to trigger backend reservations.</span>
+              <span className="text-slate-500">Every luxury tour requires an advance token deposit of ₹{advanceAmount.toLocaleString("en-IN")} to trigger backend reservations.</span>
             </li>
             <li>
               <strong className="block text-[#0b1c3e] mb-1 font-bold">2. Quick Verification</strong>

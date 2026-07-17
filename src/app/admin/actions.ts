@@ -242,6 +242,36 @@ export async function getAnalyticsData() {
     .delete()
     .lt("last_seen_at", tenMinutesAgo);
 
+  // 7. Booking Financial Metrics
+  const { data: bookingsForAnalytics, error: bookingsError } = await supabaseServer
+    .from("booking_requests")
+    .select("package_cost, advance_amount, balance_amount, booking_status");
+
+  if (bookingsError) {
+    console.error("Error querying bookings for analytics:", bookingsError);
+  }
+
+  let totalBookingValue = 0;
+  let totalAdvanceCollected = 0;
+  let pendingBalanceAmount = 0;
+  let confirmedBookings = 0;
+
+  if (bookingsForAnalytics) {
+    bookingsForAnalytics.forEach((b: any) => {
+      // Exclude Cancelled bookings from overall sums if desired, 
+      // but typically we sum based on specific logic. Let's include non-cancelled for balance.
+      if (b.booking_status !== "Cancelled") {
+        pendingBalanceAmount += Number(b.balance_amount) || 0;
+        totalBookingValue += Number(b.package_cost) || 0;
+        totalAdvanceCollected += Number(b.advance_amount) || 0;
+      }
+      
+      if (b.booking_status === "Confirmed" || b.booking_status === "Completed") {
+        confirmedBookings += 1;
+      }
+    });
+  }
+
   return {
     success: true,
     data: {
@@ -249,7 +279,11 @@ export async function getAnalyticsData() {
       todayPageViews: todayPageViews || 0,
       topPages,
       visitsChart,
-    },
+      totalBookingValue,
+      totalAdvanceCollected,
+      pendingBalanceAmount,
+      confirmedBookings
+    }
   };
 }
 
@@ -1359,6 +1393,28 @@ async function sendBookingReceiptEmail(record: any) {
               <tr>
                 <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travellers:</td>
                 <td style="padding: 6px 0;">${record.number_of_travellers}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
+            <h3 style="margin-top: 0; color: #0b1c3e; font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Fare Summary</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travel Category:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #d4af37;">${record.travel_class || "Standard"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Package Cost:</td>
+                <td style="padding: 6px 0;">₹${Number(record.package_cost || 0).toLocaleString("en-IN")}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Advance Paid:</td>
+                <td style="padding: 6px 0; color: #059669; font-weight: bold;">₹${Number(record.advance_amount || 0).toLocaleString("en-IN")}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Balance Due:</td>
+                <td style="padding: 6px 0; color: #e11d48; font-weight: bold;">₹${Number(record.balance_amount || 0).toLocaleString("en-IN")}</td>
               </tr>
             </table>
           </div>
