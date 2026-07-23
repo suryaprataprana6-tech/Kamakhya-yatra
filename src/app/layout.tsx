@@ -29,9 +29,7 @@ export const metadata: Metadata = {
   },
   description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
   keywords: ["Kamakhya Yatra", "Char Dham Yatra", "Amarnath Yatra", "Spiritual Tour Packages", "Nepal Muktinath Yatra", "Bhutan Tour"],
-  alternates: {
-    canonical: "/",
-  },
+  alternates: {},
   openGraph: {
     title: "Kamakhya Yatra - Premium Tour & Travel Company",
     description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
@@ -68,88 +66,65 @@ export default function RootLayout({
 }>) {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "TravelAgency",
-    "name": "Kamakhya Yatra",
-    "image": "https://www.kamakhyayatra.com/logo-kamakhya.png",
-    "@id": "https://www.kamakhyayatra.com/#agency",
-    "url": "https://www.kamakhyayatra.com",
-    "telephone": "+91-7079044000",
-    "priceRange": "$$",
-    "address": {
-      "@type": "PostalAddress",
-      "streetAddress": "Railway Station Road",
-      "addressLocality": "Guwahati",
-      "addressRegion": "Assam",
-      "postalCode": "781001",
-      "addressCountry": "IN"
-    },
-    "geo": {
-      "@type": "GeoCoordinates",
-      "latitude": 26.1859,
-      "longitude": 91.7486
-    },
-    "openingHoursSpecification": {
-      "@type": "OpeningHoursSpecification",
-      "dayOfWeek": [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
-      ],
-      "opens": "00:00",
-      "closes": "23:59"
-    },
-    "sameAs": [
-      "https://www.facebook.com/kamakhyayatra",
-      "https://www.instagram.com/kamakhyayatra"
-    ],
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.9",
-      "reviewCount": "1250"
-    },
-    "review": [
+    "@graph": [
       {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Surya Pratap Rana"
+        "@type": "TravelAgency",
+        "@id": "https://www.kamakhyayatra.com/#organization",
+        "name": "Kamakhya Yatra",
+        "url": "https://www.kamakhyayatra.com",
+        "logo": "https://www.kamakhyayatra.com/logo-kamakhya.png",
+        "image": "https://www.kamakhyayatra.com/logo-kamakhya.png",
+        "telephone": "+91-7079044000",
+        "priceRange": "$$",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Railway Station Road",
+          "addressLocality": "Guwahati",
+          "addressRegion": "Assam",
+          "postalCode": "781001",
+          "addressCountry": "IN"
         },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "5"
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": 26.1859,
+          "longitude": 91.7486
         },
-        "reviewBody": "Bahut hi behtareen anubhav raha. Darshan bina kisi pareshani ke sampann hua. Staff ka vyavhaar vinamr aur sahayak tha. Main Kamakhya Yatra ko zarur recommend karunga."
+        "openingHoursSpecification": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        },
+        "sameAs": [
+          "https://www.facebook.com/kamakhyayatra",
+          "https://www.instagram.com/kamakhyayatra"
+        ]
       },
       {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Priya Sharma"
+        "@type": "WebSite",
+        "@id": "https://www.kamakhyayatra.com/#website",
+        "url": "https://www.kamakhyayatra.com",
+        "name": "Kamakhya Yatra",
+        "publisher": {
+          "@id": "https://www.kamakhyayatra.com/#organization"
         },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "5"
-        },
-        "reviewBody": "Our Kamakhya temple yatra was perfectly organized. Darshan timings, stay, and transport were all smooth. The team was caring and professional throughout."
-      },
-      {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Rahul Mehta"
-        },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "5"
-        },
-        "reviewBody": "Booked a Darjeeling and Gangtok holiday package. Hotels were comfortable, itinerary was well planned, and the guide knew every local highlight. Highly recommend!"
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://www.kamakhyayatra.com/tours?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
       }
     ]
   };
+
 
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable} ${playfair.variable} scroll-smooth`}>

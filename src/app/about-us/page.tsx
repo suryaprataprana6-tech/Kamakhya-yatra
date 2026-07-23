@@ -3,6 +3,7 @@ import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ShieldCheck, Compass, Heart, Users, Target, Eye } from "lucide-react";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "About Us | Kamakhya Yatra - Premium Tour & Travel Agency",
@@ -41,16 +42,16 @@ export default function AboutUsPage() {
               <span className="text-xs font-extrabold text-[#d4af37] uppercase tracking-wider">Trusted Travel Partner</span>
               <h2 className="text-3xl font-extrabold text-[#0b1c3e] font-heading">Who We Are</h2>
               <p className="text-slate-600 text-sm md:text-base leading-relaxed">
-                Kamakhya Yatra is a premium travel agency dedicated to curating unforgettable spiritual, domestic, and international journeys. Based in the heart of Ranchi, Jharkhand, we blend convenience with high-end customer care to provide you with seamless travel experiences.
+                Kamakhya Yatra is a premium travel agency dedicated to curating unforgettable <Link href="/dharmic-yatra" className="hover:text-[#d4af37] transition-colors">spiritual</Link>, <Link href="/desh-yatra" className="hover:text-[#d4af37] transition-colors">domestic</Link>, and <Link href="/videsh-yatra" className="hover:text-[#d4af37] transition-colors">international</Link> journeys. Based in the heart of Ranchi, Jharkhand, we blend convenience with high-end customer care to provide you with seamless travel experiences.
               </p>
               <p className="text-slate-600 text-sm md:text-base leading-relaxed">
-                Whether you seek the sacred atmosphere of Himalayan shrines (such as Char Dham or Amarnath), a tranquil weekend getaway in Darjeeling, or a luxurious international holiday in Nepal or Bhutan, we arrange it all with meticulous detail.
+                Whether you seek the sacred atmosphere of Himalayan shrines (such as <Link href="/tour/spiritual/chaar-dhaam-yatra" className="hover:text-[#d4af37] transition-colors">Char Dham</Link> or <Link href="/tour/spiritual/amarnath-yatra" className="hover:text-[#d4af37] transition-colors">Amarnath</Link>), a tranquil weekend getaway in <Link href="/tour/holiday/kamakhya-darjeeling-gangtok" className="hover:text-[#d4af37] transition-colors">Darjeeling</Link>, or a luxurious international holiday in <Link href="/tour/international/nepal-muktinath-yatra" className="hover:text-[#d4af37] transition-colors">Nepal</Link> or <Link href="/tour/international/bhutan-tour" className="hover:text-[#d4af37] transition-colors">Bhutan</Link>, we arrange it all with meticulous detail.
               </p>
             </div>
             <div className="relative h-[350px] rounded-3xl overflow-hidden shadow-xl border border-slate-200">
               <img 
                 src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=1200&q=80" 
-                alt="Travelers Group" 
+                alt="Pilgrims traveling with Kamakhya Yatra" 
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0b1c3e]/80 via-transparent to-transparent flex items-end p-8 text-white">

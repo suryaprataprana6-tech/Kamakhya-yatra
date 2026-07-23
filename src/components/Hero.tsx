@@ -14,10 +14,10 @@ import { packagesData } from "../data/packages";
 
 /* ─── Carousel Slides ─── */
 const SLIDES = [
-  { src: "/hero-kashmir.png",   alt: "Dal Lake, Kashmir at Golden Hour" },
-  { src: "/hero-kamakhya.png",  alt: "Kamakhya Temple, Guwahati at Sunrise" },
-  { src: "/hero-kedarnath.png", alt: "Kedarnath Temple, Himalayan Mountains" },
-  { src: "/hero-beach.png",     alt: "Pristine Tropical Beach at Sunset" },
+  { src: "/hero-kashmir.png",   alt: "Kashmir tour – Dal Lake at golden hour" },
+  { src: "/hero-kamakhya.png",  alt: "Kamakhya temple in Guwahati at sunrise" },
+  { src: "/hero-kedarnath.png", alt: "Kedarnath temple in the Himalayas" },
+  { src: "/hero-beach.png",     alt: "Pristine tropical beach at sunset" },
 ];
 
 /* ─── Trust Stats ─── */
@@ -385,9 +385,9 @@ export default function Hero({ packages }: { packages?: any[] }) {
         {/* ── headline ── */}
         <motion.h1 {...fadeUp(0.3)}
           className="text-[clamp(2.5rem,7vw,5.5rem)] font-extrabold leading-[1.05] tracking-tight max-w-3xl text-center">
-          Travel with{" "}
+          Premium Tour Packages from Ranchi &amp;{" "}
           <span className="font-serif italic font-normal tracking-wide bg-gradient-to-r from-yellow-300 via-amber-300 to-yellow-500 bg-clip-text text-transparent">
-            Elegance
+            Across India
           </span>
         </motion.h1>
 

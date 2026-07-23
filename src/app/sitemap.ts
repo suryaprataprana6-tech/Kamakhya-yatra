@@ -14,8 +14,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes = [
     "",
     "/tours",
+    "/dharmic-yatra",
+    "/desh-yatra",
+    "/holiday-yatra",
+    "/videsh-yatra",
     "/destinations",
     "/gallery",
+    "/blog",
     "/about-us",
     "/contact-us",
     "/refund-policy",

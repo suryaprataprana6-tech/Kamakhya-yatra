@@ -24,9 +24,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const title = `${tour.title} Package - ${tour.duration} from ₹${Number(tour.price).toLocaleString("en-IN")} | Kamakhya Yatra`;
-  const includedText = Array.isArray(tour.whats_included) ? tour.whats_included.slice(0, 3).join(", ") : "";
-  const description = `${tour.description} Book the perfect ${tour.title} tour package with Kamakhya Yatra. Inclusions: ${includedText}.`;
+  let baseTitle = tour.title.trim();
+  const lowerTitle = baseTitle.toLowerCase();
+  const isSpiritual = tour.category.toLowerCase() === "spiritual" || lowerTitle.includes("dham") || lowerTitle.includes("jyotirlinga");
+  
+  if (!lowerTitle.includes("package")) {
+     if (isSpiritual && !lowerTitle.includes("yatra")) {
+        baseTitle += " Yatra Package";
+     } else if (!isSpiritual && !lowerTitle.includes("tour")) {
+        baseTitle += " Tour Package";
+     } else {
+        baseTitle += " Package";
+     }
+  }
+
+  const title = `${baseTitle} | Kamakhya Yatra`;
+  
+  const includedText = Array.isArray(tour.whats_included) ? tour.whats_included.slice(0, 3).join(", ") : "Sightseeing, Accommodation";
+  const shortDesc = tour.description ? tour.description.substring(0, 100).trim() + "..." : "";
+  const description = `Book your ${baseTitle} with Kamakhya Yatra. Verified ${tour.duration} itinerary including ${includedText}. ${shortDesc}`;
 
   return {
     title,
@@ -105,6 +121,31 @@ export default async function TourDetailRoute({ params }: Props) {
     }))
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://www.kamakhyayatra.com/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Tours",
+        "item": "https://www.kamakhyayatra.com/tours"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": tour.title,
+        "item": `https://www.kamakhyayatra.com/tour/${tour.category.toLowerCase()}/${tour.slug}`
+      }
+    ]
+  };
+
   // Build a mapped tour object that aligns with the Client component expectations
   const mappedTour = {
     ...tour,
@@ -121,6 +162,10 @@ export default async function TourDetailRoute({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(tripJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
       <TourDetailPage tour={mappedTour} />
     </>

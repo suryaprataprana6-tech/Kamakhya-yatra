@@ -207,12 +207,74 @@ export default function Footer() {
               <a href="mailto:kamakhyayatra19@gmail.com" className="hover:text-white transition text-xs break-all">kamakhyayatra19@gmail.com</a>
             </li>
           </ul>
+
+          {/* Management Profiles */}
+          <div className="mt-2 flex flex-col gap-2">
+            {/* Ankit Dubey */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3.5 transition-colors hover:bg-white/10">
+              <div className="w-[60px] h-[60px] relative shrink-0 rounded-full overflow-hidden border border-[#d4af37]/30">
+                <Image 
+                  src="/Ankit Dubey.png" 
+                  alt="Ankit Dubey - Director at Kamakhya Yatra" 
+                  fill 
+                  className="object-cover object-top" 
+                  sizes="60px"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-[15px] tracking-wide leading-tight">Ankit Dubey</span>
+                <span className="text-[#d4af37] text-[11px] font-bold uppercase tracking-wider mt-0.5">Director</span>
+                <span className="text-slate-400 text-[10px] font-medium tracking-widest mt-0.5">Kamakhya Yatra</span>
+              </div>
+            </div>
+
+            {/* Mona Sahu */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3.5 transition-colors hover:bg-white/10">
+              <div className="w-[60px] h-[60px] relative shrink-0 rounded-full overflow-hidden border border-[#d4af37]/30">
+                <Image 
+                  src="/Mona Sahu.png" 
+                  alt="Mona Sahu - Director at Kamakhya Yatra" 
+                  fill 
+                  className="object-cover object-top" 
+                  sizes="60px"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-[15px] tracking-wide leading-tight">Mona Sahu</span>
+                <span className="text-[#d4af37] text-[11px] font-bold uppercase tracking-wider mt-0.5">Director</span>
+                <span className="text-slate-400 text-[10px] font-medium tracking-widest mt-0.5">Kamakhya Yatra</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto border-t border-white/5 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
-        <p>© {new Date().getFullYear()} Kamakhya Yatra. All Rights Reserved.</p>
-        <div className="flex gap-4">
+      <div className="max-w-7xl mx-auto border-t border-white/5 pt-8 grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 items-center text-xs text-slate-500 font-semibold">
+        {/* Left: Copyright */}
+        <div className="flex justify-center md:justify-start text-center md:text-left">
+          <p>© {new Date().getFullYear()} Kamakhya Yatra. All Rights Reserved.</p>
+        </div>
+
+        {/* Center: Developer Credit */}
+        <div className="flex justify-center items-center gap-3">
+          <div className="w-[46px] h-[46px] relative shrink-0 rounded-full overflow-hidden border border-[#d4af37]/40 shadow-[0_0_15px_rgba(212,175,55,0.15)]">
+            <Image 
+              src="/developersurya.png" 
+              alt="Mr. Surya Pratap Rana - Web Developer" 
+              fill 
+              className="object-cover object-top" 
+              sizes="46px"
+            />
+          </div>
+          <div className="flex flex-col text-left">
+            <span className="text-slate-400 text-[10px] font-medium leading-tight">Developed & Maintained by</span>
+            <span className="text-white font-bold text-[13px] leading-tight mt-0.5 whitespace-nowrap">Mr. Surya Pratap Rana</span>
+            <span className="text-[#d4af37] text-[10px] font-bold tracking-widest mt-0.5">WEB DEVELOPER</span>
+          </div>
+        </div>
+
+        {/* Right: Legal Links */}
+        <div className="flex justify-center md:justify-end gap-4 flex-wrap">
           <Link href="/privacy-policy" className="hover:underline">Privacy</Link>
           <Link href="/terms-conditions" className="hover:underline">Terms</Link>
           <Link href="/refund-policy" className="hover:underline">Refunds</Link>

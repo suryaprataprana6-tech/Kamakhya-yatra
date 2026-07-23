@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download, Bell, CreditCard, AlertTriangle, Calendar } from "lucide-react";
+import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download, Bell, CreditCard, AlertTriangle, Calendar, Eye, FileCheck, FileText } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { logoutAdmin, deletePackage } from "./actions";
@@ -57,8 +57,11 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
   const [loadingCancellations, setLoadingCancellations] = useState(true);
   const [isRefreshingCancellations, setIsRefreshingCancellations] = useState(false);
   const [cancellationsSearch, setCancellationsSearch] = useState("");
+  const [cancellationSourceFilter, setCancellationSourceFilter] = useState("all");
   const [cancellationStatusFilter, setCancellationStatusFilter] = useState("all");
   const [cancellationRefundStatusFilter, setCancellationRefundStatusFilter] = useState("all");
+  const [cancellationBookingVerificationFilter, setCancellationBookingVerificationFilter] = useState("all");
+  const [cancellationInvoiceVerificationFilter, setCancellationInvoiceVerificationFilter] = useState("all");
   const [savingNotesId, setSavingNotesId] = useState<number | null>(null);
   const [cancellationsNotes, setCancellationsNotes] = useState<Record<number, string>>({});
 
@@ -460,21 +463,73 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
   }, [activeTab]);
 
   const filteredCancellations = useMemo(() => {
-    return cancellations.filter(c => {
-      const matchesSearch = 
-        c.booking_id.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
-        c.customer_name.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
-        c.phone.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
-        c.email.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
-        c.package_name.toLowerCase().includes(cancellationsSearch.toLowerCase()) ||
-        (c.cancellation_reason && c.cancellation_reason.toLowerCase().includes(cancellationsSearch.toLowerCase()));
-      
+    return cancellations.filter((c) => {
+      const src = c.booking_source || "online";
+      const reqId = c.cancellation_request_id || "";
+      const bkgId = c.booking_id || c.offline_booking_reference || "";
+      const custName = c.customer_name || c.offline_customer_name || "";
+      const phone = c.phone || c.offline_phone || "";
+      const email = c.email || c.offline_email || "";
+      const pkg = c.package_name || c.offline_package_name || "";
+      const reason = c.cancellation_reason || "";
+
+      const q = cancellationsSearch.toLowerCase();
+      const matchesSearch =
+        !q ||
+        reqId.toLowerCase().includes(q) ||
+        bkgId.toLowerCase().includes(q) ||
+        custName.toLowerCase().includes(q) ||
+        phone.toLowerCase().includes(q) ||
+        email.toLowerCase().includes(q) ||
+        pkg.toLowerCase().includes(q) ||
+        reason.toLowerCase().includes(q);
+
+      const matchesSource = cancellationSourceFilter === "all" || src === cancellationSourceFilter;
       const matchesStatus = cancellationStatusFilter === "all" || c.status === cancellationStatusFilter;
       const matchesRefundStatus = cancellationRefundStatusFilter === "all" || c.refund_status === cancellationRefundStatusFilter;
-      
-      return matchesSearch && matchesStatus && matchesRefundStatus;
+      const matchesBookingVerif =
+        cancellationBookingVerificationFilter === "all" ||
+        (c.booking_verification_status || (src === "online" ? "Verified" : "Pending Verification")) === cancellationBookingVerificationFilter;
+      const matchesInvoiceVerif =
+        cancellationInvoiceVerificationFilter === "all" ||
+        (c.invoice_verification_status || "Pending Verification") === cancellationInvoiceVerificationFilter;
+
+      return (
+        matchesSearch &&
+        matchesSource &&
+        matchesStatus &&
+        matchesRefundStatus &&
+        matchesBookingVerif &&
+        matchesInvoiceVerif
+      );
     });
-  }, [cancellations, cancellationsSearch, cancellationStatusFilter, cancellationRefundStatusFilter]);
+  }, [
+    cancellations,
+    cancellationsSearch,
+    cancellationSourceFilter,
+    cancellationStatusFilter,
+    cancellationRefundStatusFilter,
+    cancellationBookingVerificationFilter,
+    cancellationInvoiceVerificationFilter,
+  ]);
+
+  const handleBookingVerificationChange = async (id: number, newStatus: string) => {
+    try {
+      const { updateCancellationBookingVerificationStatus } = await import("./actions");
+      const res = await updateCancellationBookingVerificationStatus(id, newStatus);
+      if (res.success) {
+        setCancellations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, booking_verification_status: newStatus } : c))
+        );
+        alert(`Booking verification status updated to: ${newStatus}`);
+      } else {
+        alert("Failed to update booking verification status: " + res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error updating booking verification status.");
+    }
+  };
 
   const handleCancellationStatusChange = async (cancellationId: number, newStatus: string) => {
     try {
@@ -527,6 +582,59 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
       alert("Error saving admin notes.");
     } finally {
       setSavingNotesId(null);
+    }
+  };
+
+  const handleViewInvoice = async (id: number) => {
+    try {
+      const { getCancellationInvoiceSignedUrl } = await import("./actions");
+      const res = await getCancellationInvoiceSignedUrl(id, false);
+      if (res.success && res.signedUrl) {
+        window.open(res.signedUrl, "_blank");
+      } else {
+        alert("Failed to view invoice: " + (res.error || "Invoice file not available."));
+      }
+    } catch (err: any) {
+      console.error("View invoice error:", err);
+      alert("Error generating secure invoice view link.");
+    }
+  };
+
+  const handleDownloadInvoice = async (id: number) => {
+    try {
+      const { getCancellationInvoiceSignedUrl } = await import("./actions");
+      const res = await getCancellationInvoiceSignedUrl(id, true);
+      if (res.success && res.signedUrl) {
+        const a = document.createElement("a");
+        a.href = res.signedUrl;
+        a.download = res.fileName || `cancellation_invoice_${id}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        alert("Failed to download invoice: " + (res.error || "Invoice file not available."));
+      }
+    } catch (err: any) {
+      console.error("Download invoice error:", err);
+      alert("Error generating secure invoice download link.");
+    }
+  };
+
+  const handleInvoiceVerificationChange = async (id: number, newStatus: string) => {
+    try {
+      const { updateCancellationInvoiceVerificationStatus } = await import("./actions");
+      const res = await updateCancellationInvoiceVerificationStatus(id, newStatus);
+      if (res.success) {
+        setCancellations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, invoice_verification_status: newStatus } : c))
+        );
+        alert(`Invoice verification status updated to: ${newStatus}`);
+      } else {
+        alert("Failed to update invoice verification status: " + res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error updating invoice verification status.");
     }
   };
 
@@ -1918,24 +2026,60 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                   </div>
 
                   {/* Controls Bar */}
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                      <div className="relative w-full sm:w-[240px]">
+                  <div className="flex flex-col gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="relative flex-1 min-w-[240px]">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                         <input
                           type="text"
-                          placeholder="Search cancellations by Booking ID, customer..."
+                          placeholder="Search by Request ID, Booking ID, Invoice, Customer, Phone..."
                           value={cancellationsSearch}
                           onChange={(e) => setCancellationsSearch(e.target.value)}
                           className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-xs bg-slate-50/50"
                         />
                       </div>
-                      
-                      {/* Cancellation status filter */}
+
+                      {/* Source Filter */}
+                      <select
+                        value={cancellationSourceFilter}
+                        onChange={(e) => setCancellationSourceFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e] font-semibold"
+                      >
+                        <option value="all">All Booking Sources</option>
+                        <option value="online">Online Booking</option>
+                        <option value="offline">Offline / Counter</option>
+                      </select>
+
+                      {/* Booking Verification Filter */}
+                      <select
+                        value={cancellationBookingVerificationFilter}
+                        onChange={(e) => setCancellationBookingVerificationFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e] font-semibold"
+                      >
+                        <option value="all">All Booking Verif.</option>
+                        <option value="Pending Verification">Pending Booking Verif.</option>
+                        <option value="Verified">Booking Verified</option>
+                        <option value="Rejected">Booking Rejected</option>
+                      </select>
+
+                      {/* Invoice Verification Filter */}
+                      <select
+                        value={cancellationInvoiceVerificationFilter}
+                        onChange={(e) => setCancellationInvoiceVerificationFilter(e.target.value)}
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e] font-semibold"
+                      >
+                        <option value="all">All Invoice Verif.</option>
+                        <option value="Pending Verification">Pending Invoice Verif.</option>
+                        <option value="Verified">Invoice Verified</option>
+                        <option value="Rejected">Invoice Rejected</option>
+                      </select>
+
+                      {/* Request Status Filter */}
                       <select
                         value={cancellationStatusFilter}
                         onChange={(e) => setCancellationStatusFilter(e.target.value)}
-                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e] font-semibold"
                       >
                         <option value="all">All Request Statuses</option>
                         <option value="Pending">Pending</option>
@@ -1945,13 +2089,14 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                         <option value="Completed">Completed</option>
                       </select>
 
-                      {/* Refund status filter */}
+                      {/* Refund Status Filter */}
                       <select
                         value={cancellationRefundStatusFilter}
                         onChange={(e) => setCancellationRefundStatusFilter(e.target.value)}
-                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e]"
+                        className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-600 outline-none focus:border-[#0b1c3e] font-semibold"
                       >
                         <option value="all">All Refund Statuses</option>
+                        <option value="Not Initiated">Not Initiated</option>
                         <option value="Eligible">Eligible</option>
                         <option value="Not Eligible">Not Eligible</option>
                         <option value="Refund Initiated">Refund Initiated</option>
@@ -1959,23 +2104,23 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                       </select>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                    <div className="flex items-center gap-2 justify-end pt-2 border-t border-slate-100">
                       <button
                         onClick={handleExportCancellationsCSV}
-                        className="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                        className="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 px-3.5 py-2 rounded-xl font-bold text-xs transition"
                       >
                         Export CSV
                       </button>
                       <button
                         onClick={handleExportCancellationsExcel}
-                        className="inline-flex items-center gap-1.5 bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#b8952d] border border-[#d4af37]/35 px-4 py-2.5 rounded-xl font-bold text-xs transition"
+                        className="inline-flex items-center gap-1.5 bg-[#d4af37]/10 hover:bg-[#d4af37]/20 text-[#b8952d] border border-[#d4af37]/35 px-3.5 py-2 rounded-xl font-bold text-xs transition"
                       >
                         Export Excel
                       </button>
                       <button
                         onClick={() => fetchCancellations(true)}
                         disabled={isRefreshingCancellations}
-                        className="inline-flex items-center justify-center w-10 h-10 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 text-slate-500 rounded-xl border border-slate-200 transition"
+                        className="inline-flex items-center justify-center w-9 h-9 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 text-slate-500 rounded-xl border border-slate-200 transition"
                         title="Refresh cancellations"
                       >
                         <RefreshCw className={`w-4 h-4 ${isRefreshingCancellations ? "animate-spin" : ""}`} />
@@ -1989,10 +2134,13 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
-                            <th className="p-4 w-28">Booking ID</th>
+                            <th className="p-4">Request ID & Source</th>
+                            <th className="p-4">Booking / Invoice Ref</th>
                             <th className="p-4">Customer Info</th>
                             <th className="p-4">Package details</th>
-                            <th className="p-4 w-[28%]">Reason & Notes</th>
+                            <th className="p-4 w-[20%]">Reason & Notes</th>
+                            <th className="p-4 text-center">Booking Verif.</th>
+                            <th className="p-4 text-center">Invoice Proof</th>
                             <th className="p-4 text-center">Status</th>
                             <th className="p-4 text-center">Refund</th>
                             <th className="p-4 text-right">Submitted</th>
@@ -2002,21 +2150,49 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                           {filteredCancellations.length > 0 ? (
                             filteredCancellations.map((c) => (
                               <tr key={c.id} className="hover:bg-slate-50/30 transition align-top">
-                                {/* Booking ID */}
-                                <td className="p-4 font-bold text-[#0b1c3e]">
-                                  {c.booking_id}
+                                {/* Request ID & Source */}
+                                <td className="p-4">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className="font-extrabold text-[#0b1c3e] text-xs">
+                                      {c.cancellation_request_id || `KY-CAN-${c.id}`}
+                                    </span>
+                                    {(c.booking_source || "online") === "offline" ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#d4af37]/15 text-[#b8952d] border border-[#d4af37]/35 uppercase">
+                                        OFFLINE / COUNTER
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                                        ONLINE
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
+
+                                {/* Booking / Invoice Ref */}
+                                <td className="p-4 font-bold text-slate-800 text-xs">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span>{c.booking_id || c.offline_booking_reference || "N/A"}</span>
+                                    {c.offline_booking_office && (
+                                      <span className="text-[9px] text-slate-400 font-normal">
+                                        🏢 {c.offline_booking_office}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
                                 {/* Customer Info */}
                                 <td className="p-4">
                                   <div className="flex flex-col gap-1">
-                                    <span className="font-extrabold text-slate-800 text-sm">{c.customer_name}</span>
+                                    <span className="font-extrabold text-slate-800 text-sm">
+                                      {c.customer_name || c.offline_customer_name}
+                                    </span>
                                     <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
-                                      <span>📞 {c.phone}</span>
-                                      {c.phone && (
+                                      <span>📞 {c.phone || c.offline_phone}</span>
+                                      {(c.phone || c.offline_phone) && (
                                         <a
                                           href={getWhatsAppLink(
-                                            c.phone,
-                                            `Namaste ${c.customer_name},\n\nThis is Kamakhya Yatra support. Regarding your booking cancellation request for Booking ID ${c.booking_id} (${c.package_name}). We are processing your request. Please let us know if you have any questions.`
+                                            c.phone || c.offline_phone,
+                                            `Namaste ${c.customer_name || c.offline_customer_name},\n\nThis is Kamakhya Yatra support regarding your cancellation request ${c.cancellation_request_id || c.booking_id}.`
                                           )}
                                           target="_blank"
                                           rel="noopener noreferrer"
@@ -2030,21 +2206,33 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                         </a>
                                       )}
                                     </div>
-                                    <span className="text-slate-400 text-[11px]">{c.email}</span>
+                                    <span className="text-slate-400 text-[11px]">{c.email || c.offline_email || "No email"}</span>
                                   </div>
                                 </td>
+
                                 {/* Package Details */}
                                 <td className="p-4">
                                   <div className="flex flex-col gap-1">
-                                    <span className="font-semibold text-slate-700">{c.package_name}</span>
-                                    <span className="text-slate-500 font-bold text-[10px] uppercase">📅 Travel: {c.travel_date}</span>
-                                    {c.refund_policy_accepted && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 font-bold px-1.5 py-0.5 rounded self-start mt-1">
-                                        <Check className="w-2.5 h-2.5" /> Policy Accepted
+                                    <span className="font-semibold text-slate-700">{c.package_name || c.offline_package_name}</span>
+                                    <span className="text-slate-500 font-bold text-[10px] uppercase">📅 Travel: {c.travel_date || c.offline_travel_date}</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5 text-[10px]">
+                                      <span className="text-slate-600 font-medium bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {c.offline_travel_class || c.travel_class || "Standard"}
                                       </span>
-                                    )}
+                                      {c.offline_travellers ? (
+                                        <span className="text-slate-500 font-medium">
+                                          👥 {c.offline_travellers} pax
+                                        </span>
+                                      ) : null}
+                                      {c.offline_amount_paid ? (
+                                        <span className="text-emerald-700 font-extrabold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                          Paid: ₹{c.offline_amount_paid} {c.offline_payment_mode ? `(${c.offline_payment_mode})` : ""}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </td>
+
                                 {/* Reason & Admin Notes */}
                                 <td className="p-4">
                                   <div className="flex flex-col gap-3">
@@ -2058,7 +2246,7 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                       <label htmlFor={`notes-${c.id}`} className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center justify-between">
                                         <span>Admin Notes:</span>
                                         {c.admin_notes !== (cancellationsNotes[c.id] || "") && (
-                                          <span className="text-[9px] text-amber-500 font-extrabold uppercase">Unsaved Changes</span>
+                                          <span className="text-[9px] text-amber-500 font-extrabold uppercase">Unsaved</span>
                                         )}
                                       </label>
                                       <div className="flex gap-1.5 items-end">
@@ -2067,29 +2255,101 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                           rows={2}
                                           value={cancellationsNotes[c.id] || ""}
                                           onChange={(e) => setCancellationsNotes({ ...cancellationsNotes, [c.id]: e.target.value })}
-                                          placeholder="Add private admin follow-up notes here..."
+                                          placeholder="Add admin notes..."
                                           className="flex-1 p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:bg-white focus:border-[#0b1c3e] transition resize-none"
                                         />
                                         <button
                                           onClick={() => handleSaveNotes(c.id)}
                                           disabled={savingNotesId === c.id || c.admin_notes === (cancellationsNotes[c.id] || "")}
-                                          className="p-2.5 bg-[#0b1c3e] hover:bg-[#1e3c72] text-white disabled:opacity-30 rounded-lg transition"
+                                          className="p-2 bg-[#0b1c3e] hover:bg-[#1e3c72] text-white disabled:opacity-30 rounded-lg transition"
                                           title="Save Notes"
                                         >
                                           {savingNotesId === c.id ? (
-                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                           ) : (
-                                            <Save className="w-4 h-4" />
+                                            <Save className="w-3.5 h-3.5" />
                                           )}
                                         </button>
                                       </div>
                                     </div>
                                   </div>
                                 </td>
+
+                                {/* Booking Verification */}
+                                <td className="p-4 text-center">
+                                  <select
+                                    value={c.booking_verification_status || ((c.booking_source || "online") === "online" ? "Verified" : "Pending Verification")}
+                                    onChange={(e) => handleBookingVerificationChange(c.id, e.target.value)}
+                                    className={`text-[9px] font-extrabold uppercase px-2 py-1 rounded-full border outline-none cursor-pointer ${
+                                      (c.booking_verification_status || ((c.booking_source || "online") === "online" ? "Verified" : "Pending Verification")) === "Verified"
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : (c.booking_verification_status || "Pending Verification") === "Rejected"
+                                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                                        : "bg-amber-50 text-amber-700 border-amber-200"
+                                    }`}
+                                  >
+                                    <option value="Pending Verification">Pending Verification</option>
+                                    <option value="Verified">Verified</option>
+                                    <option value="Rejected">Rejected</option>
+                                  </select>
+                                </td>
+
+                                {/* Invoice Proof */}
+                                <td className="p-4 text-center">
+                                  <div className="flex flex-col items-center gap-2">
+                                    {c.invoice_file_path ? (
+                                      <>
+                                        <select
+                                          value={c.invoice_verification_status || "Pending Verification"}
+                                          onChange={(e) => handleInvoiceVerificationChange(c.id, e.target.value)}
+                                          className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border outline-none cursor-pointer ${
+                                            c.invoice_verification_status === "Verified"
+                                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                              : c.invoice_verification_status === "Rejected"
+                                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                                              : "bg-amber-50 text-amber-700 border-amber-200"
+                                          }`}
+                                        >
+                                          <option value="Pending Verification">Pending Verification</option>
+                                          <option value="Verified">Verified</option>
+                                          <option value="Rejected">Rejected</option>
+                                        </select>
+
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                          <button
+                                            onClick={() => handleViewInvoice(c.id)}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-[#0b1c3e] hover:text-white text-slate-700 font-bold text-[10px] rounded-lg transition"
+                                            title="View Original Booking Bill"
+                                          >
+                                            <Eye className="w-3 h-3" /> View
+                                          </button>
+                                          <button
+                                            onClick={() => handleDownloadInvoice(c.id)}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-800 border border-amber-200/60 font-bold text-[10px] rounded-lg transition"
+                                            title="Download Original Booking Bill"
+                                          >
+                                            <Download className="w-3 h-3" /> Download
+                                          </button>
+                                        </div>
+
+                                        {c.invoice_file_name && (
+                                          <span className="text-[9px] text-slate-400 max-w-[110px] truncate" title={c.invoice_file_name}>
+                                            📄 {c.invoice_file_name}
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 font-semibold italic">
+                                        No Bill Uploaded
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
                                 {/* Status */}
                                 <td className="p-4 text-center">
                                   <select
-                                    value={c.status || 'Pending'}
+                                    value={c.status || "Pending"}
                                     onChange={(e) => handleCancellationStatusChange(c.id, e.target.value)}
                                     className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer ${
                                       c.status === "Pending"
@@ -2110,10 +2370,11 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                     <option value="Completed">Completed</option>
                                   </select>
                                 </td>
+
                                 {/* Refund Status */}
                                 <td className="p-4 text-center">
                                   <select
-                                    value={c.refund_status || 'Eligible'}
+                                    value={c.refund_status || "Not Initiated"}
                                     onChange={(e) => handleCancellationRefundStatusChange(c.id, e.target.value)}
                                     className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer ${
                                       c.refund_status === "Eligible"
@@ -2124,29 +2385,31 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                                         ? "bg-blue-50 text-blue-600 border-blue-100"
                                         : c.refund_status === "Refund Processed"
                                         ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
                                     }`}
                                   >
+                                    <option value="Not Initiated">Not Initiated</option>
                                     <option value="Eligible">Eligible</option>
                                     <option value="Not Eligible">Not Eligible</option>
                                     <option value="Refund Initiated">Refund Initiated</option>
                                     <option value="Refund Processed">Refund Processed</option>
                                   </select>
                                 </td>
+
                                 {/* Date Submitted */}
-                                <td className="p-4 text-right text-slate-400 font-medium">
+                                <td className="p-4 text-right text-slate-400 font-medium whitespace-nowrap">
                                   {new Date(c.created_at).toLocaleString("en-IN", {
                                     day: "numeric",
                                     month: "short",
                                     hour: "2-digit",
-                                    minute: "2-digit"
+                                    minute: "2-digit",
                                   })}
                                 </td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={7} className="text-center py-16 text-slate-400 font-bold">
+                              <td colSpan={10} className="text-center py-16 text-slate-400 font-bold">
                                 No cancellation requests match your filters.
                               </td>
                             </tr>

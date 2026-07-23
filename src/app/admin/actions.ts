@@ -161,6 +161,25 @@ export async function deletePackage(id: number) {
   return { success: true };
 }
 
+export async function getPublicPackagesList() {
+  try {
+    const { data, error } = await supabaseServer
+      .from("packages")
+      .select("id, title")
+      .order("title", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching public packages list:", error);
+      return { success: false, data: [] };
+    }
+
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error("getPublicPackagesList error:", err);
+    return { success: false, data: [] };
+  }
+}
+
 export async function getAnalyticsData() {
   const cookieStore = await cookies();
   const session = cookieStore.get("admin_session");
@@ -477,128 +496,624 @@ export async function updateLeadStatus(id: number, status: string) {
   }
 }
 
-export async function submitCancellationRequest(data: {
-  bookingId: string;
-  customerName: string;
-  phone: string;
-  email: string;
-  packageName: string;
-  travelDate: string;
-  cancellationReason: string;
-  refundPolicyAccepted: boolean;
-}) {
-  // Input validations
-  if (!data.bookingId.trim()) return { success: false, error: "Booking ID is required." };
-  if (!data.customerName.trim()) return { success: false, error: "Customer name is required." };
-  if (!data.phone.trim() || data.phone.replace(/\D/g, "").length < 10) {
-    return { success: false, error: "A valid phone number with at least 10 digits is required." };
-  }
-  if (!data.email.trim() || !data.email.includes("@")) {
-    return { success: false, error: "A valid email address is required." };
-  }
-  if (!data.packageName.trim()) return { success: false, error: "Package name is required." };
-  if (!data.travelDate.trim()) return { success: false, error: "Travel date is required." };
-  if (!data.cancellationReason.trim()) return { success: false, error: "Cancellation reason is required." };
-  if (!data.refundPolicyAccepted) {
-    return { success: false, error: "You must accept the Refund Policy." };
-  }
-
-  const cleanedPhone = data.phone.replace(/\D/g, "");
-
+export async function verifyBookingForCancellation(bookingReference: string, identifier: string) {
   try {
-    // Spam protection: prevent duplicate submission for the same booking_id in the last 15 minutes
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const { data: existing, error: findError } = await supabaseServer
-      .from("booking_cancellations")
-      .select("id")
-      .eq("booking_id", data.bookingId.trim())
-      .gt("created_at", fifteenMinutesAgo)
-      .limit(1);
+    const cleanRef = bookingReference.trim();
+    const cleanIdentifier = identifier.trim();
 
-    if (findError) {
-      console.error("Error checking existing cancellations:", findError);
+    if (!cleanRef || !cleanIdentifier) {
+      return { success: false, error: "Booking ID and Phone Number / Email are required for verification." };
     }
 
-    if (existing && existing.length > 0) {
+    const isEmail = cleanIdentifier.includes("@");
+    const cleanPhone = cleanIdentifier.replace(/[^0-9+]/g, "");
+
+    // Search booking_requests by reference or ID
+    let query = supabaseServer.from("booking_requests").select("*");
+
+    if (cleanRef.startsWith("KY-") || cleanRef.includes("-")) {
+      query = query.eq("booking_reference", cleanRef);
+    } else if (!isNaN(Number(cleanRef))) {
+      query = query.or(`booking_reference.eq.${cleanRef},id.eq.${cleanRef}`);
+    } else {
+      query = query.eq("booking_reference", cleanRef);
+    }
+
+    const { data: records, error } = await query;
+
+    if (error) {
+      console.error("Error querying booking for verification:", error);
+      return { success: false, error: error.message };
+    }
+
+    if (!records || records.length === 0) {
+      return { success: false, error: "No matching booking found. Please check your Booking ID." };
+    }
+
+    // Match phone or email against verified records
+    const matchingBooking = records.find((b) => {
+      if (isEmail) {
+        return b.email?.toLowerCase().trim() === cleanIdentifier.toLowerCase();
+      } else {
+        const bPhoneClean = b.phone?.replace(/[^0-9]/g, "") || "";
+        const inputPhoneClean = cleanPhone.replace(/[^0-9]/g, "");
+        return bPhoneClean.length >= 10 && (bPhoneClean.endsWith(inputPhoneClean) || inputPhoneClean.endsWith(bPhoneClean));
+      }
+    });
+
+    if (!matchingBooking) {
       return {
         success: false,
-        error: "A cancellation request for this Booking ID was already submitted recently. Please wait a few minutes or contact support.",
+        error: `Booking ID found, but the provided ${isEmail ? "email" : "mobile number"} does not match the original booking record.`,
       };
     }
 
-    // Insert to Supabase
-    const { data: newRecord, error: insertError } = await supabaseServer
+    // Calculate amount paid logic
+    const pkgCost = Number(matchingBooking.package_cost || matchingBooking.booking_amount || 0);
+    const advAmount = Number(matchingBooking.advance_amount || 0);
+    const amtPaid = matchingBooking.payment_status === "Paid" || matchingBooking.payment_status === "Full Paid" ? pkgCost : advAmount > 0 ? advAmount : pkgCost;
+
+    return {
+      success: true,
+      data: {
+        bookingId: matchingBooking.id,
+        bookingReference: matchingBooking.booking_reference || `KY-BKG-${matchingBooking.id}`,
+        customerName: matchingBooking.customer_name,
+        phone: matchingBooking.phone,
+        email: matchingBooking.email,
+        packageName: matchingBooking.package_name,
+        travelDate: matchingBooking.travel_date,
+        travelClass: matchingBooking.travel_class || matchingBooking.hotel_category || "Standard Class",
+        packageCost: pkgCost,
+        advanceAmount: advAmount,
+        balanceAmount: Number(matchingBooking.balance_amount || 0),
+        amountPaid: amtPaid,
+        paymentStatus: matchingBooking.payment_status || "Unpaid",
+        bookingStatus: matchingBooking.booking_status || "Pending",
+      },
+    };
+  } catch (err: any) {
+    console.error("Verification error:", err);
+    return { success: false, error: err.message || "Failed to verify booking." };
+  }
+}
+
+function generateCancellationRequestId() {
+  const currentYear = new Date().getFullYear();
+  const randomDigits = Math.floor(100000 + Math.random() * 900000);
+  return `KY-CAN-${currentYear}-${randomDigits}`;
+}
+
+export async function submitCancellationRequest(input: FormData | {
+  bookingSource?: "online" | "offline";
+  bookingId?: string;
+  customerName?: string;
+  phone?: string;
+  email?: string;
+  packageName?: string;
+  travelDate?: string;
+  cancellationReason?: string;
+  refundPolicyAccepted?: boolean;
+  invoiceFile?: File | null;
+  // Offline fields
+  offlineBookingReference?: string;
+  offlineCustomerName?: string;
+  offlinePhone?: string;
+  offlineEmail?: string;
+  offlinePackageName?: string;
+  offlineTravelDate?: string;
+  offlineTravelClass?: string;
+  offlineTravellers?: number;
+  offlinePackageAmount?: number;
+  offlineAmountPaid?: number;
+  offlinePaymentMode?: string;
+  offlineBookingOffice?: string;
+}) {
+  try {
+    let bookingSource: "online" | "offline" = "online";
+    let bookingId = "";
+    let phoneOrEmail = "";
+    let cancellationReason = "";
+    let refundPolicyAccepted = false;
+    let file: File | null = null;
+
+    let offlineBookingReference = "";
+    let offlineCustomerName = "";
+    let offlinePhone = "";
+    let offlineEmail = "";
+    let offlinePackageName = "";
+    let offlineTravelDate = "";
+    let offlineTravelClass = "";
+    let offlineTravellers = 1;
+    let offlinePackageAmount = 0;
+    let offlineAmountPaid = 0;
+    let offlinePaymentMode = "";
+    let offlineBookingOffice = "";
+
+    if (typeof input === "object" && "get" in input && typeof input.get === "function") {
+      const formData = input as FormData;
+      bookingSource = (formData.get("bookingSource") as "online" | "offline") || "online";
+
+      if (bookingSource === "offline") {
+        offlineBookingReference = (formData.get("offlineBookingReference") as string || "").trim();
+        offlineCustomerName = (formData.get("offlineCustomerName") as string || "").trim();
+        offlinePhone = (formData.get("offlinePhone") as string || "").trim();
+        offlineEmail = (formData.get("offlineEmail") as string || "").trim();
+        offlinePackageName = (formData.get("offlinePackageName") as string || "").trim();
+        offlineTravelDate = (formData.get("offlineTravelDate") as string || "").trim();
+        offlineTravelClass = (formData.get("offlineTravelClass") as string || "").trim();
+        offlineTravellers = Number(formData.get("offlineTravellers") || 1);
+        offlinePackageAmount = Number(formData.get("offlinePackageAmount") || 0);
+        offlineAmountPaid = Number(formData.get("offlineAmountPaid") || 0);
+        offlinePaymentMode = (formData.get("offlinePaymentMode") as string || "").trim();
+        offlineBookingOffice = (formData.get("offlineBookingOffice") as string || "").trim();
+        cancellationReason = (formData.get("cancellationReason") as string || "").trim();
+        refundPolicyAccepted = formData.get("refundPolicyAccepted") === "true";
+        file = formData.get("invoiceFile") as File | null;
+      } else {
+        bookingId = (formData.get("bookingId") as string || "").trim();
+        phoneOrEmail = (formData.get("phoneOrEmail") as string || formData.get("phone") as string || formData.get("email") as string || "").trim();
+        cancellationReason = (formData.get("cancellationReason") as string || "").trim();
+        refundPolicyAccepted = formData.get("refundPolicyAccepted") === "true";
+        file = formData.get("invoiceFile") as File | null;
+      }
+    } else {
+      const legacyData = input as any;
+      bookingSource = legacyData.bookingSource || "online";
+      if (bookingSource === "offline") {
+        offlineBookingReference = (legacyData.offlineBookingReference || legacyData.bookingId || "").trim();
+        offlineCustomerName = (legacyData.offlineCustomerName || legacyData.customerName || "").trim();
+        offlinePhone = (legacyData.offlinePhone || legacyData.phone || "").trim();
+        offlineEmail = (legacyData.offlineEmail || legacyData.email || "").trim();
+        offlinePackageName = (legacyData.offlinePackageName || legacyData.packageName || "").trim();
+        offlineTravelDate = (legacyData.offlineTravelDate || legacyData.travelDate || "").trim();
+        offlineTravelClass = (legacyData.offlineTravelClass || "Standard").trim();
+        offlineTravellers = Number(legacyData.offlineTravellers || 1);
+        offlinePackageAmount = Number(legacyData.offlinePackageAmount || 0);
+        offlineAmountPaid = Number(legacyData.offlineAmountPaid || 0);
+        offlinePaymentMode = (legacyData.offlinePaymentMode || "Cash").trim();
+        offlineBookingOffice = (legacyData.offlineBookingOffice || "").trim();
+        cancellationReason = (legacyData.cancellationReason || "").trim();
+        refundPolicyAccepted = !!legacyData.refundPolicyAccepted;
+        file = legacyData.invoiceFile || null;
+      } else {
+        bookingId = (legacyData.bookingId || "").trim();
+        phoneOrEmail = (legacyData.phone || legacyData.email || "").trim();
+        cancellationReason = (legacyData.cancellationReason || "").trim();
+        refundPolicyAccepted = !!legacyData.refundPolicyAccepted;
+        file = legacyData.invoiceFile || null;
+      }
+    }
+
+    const reqId = generateCancellationRequestId();
+
+    // Check Mandatory File Attachment
+    if (!file || file.size === 0) {
+      return {
+        success: false,
+        error: bookingSource === "offline"
+          ? "Original booking bill/invoice is required for offline booking cancellation."
+          : "Please upload your original Kamakhya Yatra booking invoice/receipt before submitting the cancellation request.",
+      };
+    }
+
+    // Validate file size: max 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: "File size exceeds the maximum limit of 5 MB." };
+    }
+
+    // Validate file format
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
+    const allowedExts = ["pdf", "jpg", "jpeg", "png"];
+
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(fileExt)) {
+      return {
+        success: false,
+        error: "Unsupported file type. Allowed formats: PDF, JPG, JPEG, PNG.",
+      };
+    }
+
+    // ==========================================
+    // BRANCH A: ONLINE BOOKING CANCELLATION FLOW
+    // ==========================================
+    if (bookingSource === "online") {
+      if (!bookingId) return { success: false, error: "Booking ID is required." };
+      if (!phoneOrEmail) return { success: false, error: "Phone number or email is required for verification." };
+      if (!cancellationReason) return { success: false, error: "Cancellation reason is required." };
+      if (!refundPolicyAccepted) return { success: false, error: "You must accept the Refund Policy declaration." };
+
+      const verifyRes = await verifyBookingForCancellation(bookingId, phoneOrEmail);
+      if (!verifyRes.success || !verifyRes.data) {
+        return {
+          success: false,
+          error: verifyRes.error || "Booking verification failed. Please check your Booking ID.",
+        };
+      }
+
+      const authoritativeBooking = verifyRes.data;
+
+      const { data: existingActive, error: activeErr } = await supabaseServer
+        .from("booking_cancellations")
+        .select("id, status")
+        .eq("booking_id", authoritativeBooking.bookingReference)
+        .in("status", ["Pending", "Under Review", "Approved"])
+        .limit(1);
+
+      if (activeErr) console.error("Error checking active online cancellations:", activeErr);
+
+      if (existingActive && existingActive.length > 0) {
+        return {
+          success: false,
+          error: `An active cancellation request for Booking ID ${authoritativeBooking.bookingReference} is already under review (${existingActive[0].status}).`,
+        };
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const storagePath = `cancellations/online/${authoritativeBooking.bookingReference}/${Date.now()}-${cleanFileName}`;
+
+      let { error: uploadError } = await supabaseServer.storage
+        .from("cancellation-invoices")
+        .upload(storagePath, buffer, {
+          contentType: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+          upsert: false,
+        });
+
+      if (uploadError && uploadError.message?.toLowerCase().includes("not found")) {
+        console.log("Bucket 'cancellation-invoices' not found. Creating private bucket...");
+        const { error: createErr } = await supabaseServer.storage.createBucket("cancellation-invoices", {
+          public: false,
+          fileSizeLimit: 5242880,
+        });
+        if (!createErr) {
+          const retryRes = await supabaseServer.storage
+            .from("cancellation-invoices")
+            .upload(storagePath, buffer, {
+              contentType: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+              upsert: false,
+            });
+          uploadError = retryRes.error;
+        }
+      }
+
+      if (uploadError) {
+        console.error("Supabase Storage cancellation invoice upload error:", uploadError);
+        return {
+          success: false,
+          error: "Failed to upload booking invoice/receipt: " + uploadError.message,
+        };
+      }
+
+      const { data: newRecord, error: insertError } = await supabaseServer
+        .from("booking_cancellations")
+        .insert({
+          cancellation_request_id: reqId,
+          booking_id: authoritativeBooking.bookingReference,
+          customer_name: authoritativeBooking.customerName,
+          phone: authoritativeBooking.phone,
+          email: authoritativeBooking.email,
+          package_name: authoritativeBooking.packageName,
+          travel_date: authoritativeBooking.travelDate,
+          cancellation_reason: cancellationReason,
+          refund_policy_accepted: true,
+          status: "Pending",
+          refund_status: "Eligible",
+          booking_source: "online",
+          booking_verification_status: "Verified",
+          invoice_file_path: storagePath,
+          invoice_file_name: file.name,
+          invoice_file_type: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+          invoice_file_size: file.size,
+          invoice_uploaded_at: new Date().toISOString(),
+          invoice_verification_status: "Pending Verification",
+          admin_notes: "",
+        })
+        .select("id");
+
+      if (insertError) {
+        console.error("Error inserting online cancellation record:", insertError);
+        await supabaseServer.storage.from("cancellation-invoices").remove([storagePath]).catch(() => {});
+        return { success: false, error: "Failed to save cancellation request: " + insertError.message };
+      }
+
+      const cancellationId = newRecord && newRecord.length > 0 ? newRecord[0].id : null;
+
+      await createAdminNotification(
+        "cancellation_request",
+        `New Cancellation Request – Invoice Uploaded (${reqId})`,
+        `Booking ID: ${authoritativeBooking.bookingReference} | Customer: ${authoritativeBooking.customerName} | Package: ${authoritativeBooking.packageName}`,
+        "cancellations",
+        reqId
+      ).catch(() => {});
+
+      await sendAdminCancellationNotificationEmail({
+        bookingId: authoritativeBooking.bookingReference,
+        customerName: authoritativeBooking.customerName,
+        phone: authoritativeBooking.phone,
+        email: authoritativeBooking.email,
+        packageName: authoritativeBooking.packageName,
+        travelDate: authoritativeBooking.travelDate,
+        cancellationReason: cancellationReason,
+      }).catch(() => {});
+
+      return {
+        success: true,
+        id: cancellationId,
+        cancellationRequestId: reqId,
+        bookingReference: authoritativeBooking.bookingReference,
+        bookingSource: "online",
+      };
+    }
+
+    // ===========================================
+    // BRANCH B: OFFLINE BOOKING CANCELLATION FLOW
+    // ===========================================
+    else {
+      if (!offlineBookingReference) return { success: false, error: "Offline Booking / Invoice Number is required." };
+      if (!offlineCustomerName) return { success: false, error: "Customer Full Name is required." };
+      if (!offlinePhone || offlinePhone.replace(/\D/g, "").length < 10) {
+        return { success: false, error: "A valid 10-digit mobile number is required." };
+      }
+      if (!offlinePackageName) return { success: false, error: "Package / Yatra Name is required." };
+      if (!offlineTravelDate) return { success: false, error: "Travel Date is required." };
+      if (!cancellationReason) return { success: false, error: "Cancellation reason is required." };
+      if (!refundPolicyAccepted) return { success: false, error: "You must accept the Refund Policy declaration." };
+
+      const cleanPhone = offlinePhone.replace(/\D/g, "");
+
+      const { data: existingOffline, error: offlineDupErr } = await supabaseServer
+        .from("booking_cancellations")
+        .select("id, status")
+        .eq("booking_source", "offline")
+        .eq("offline_booking_reference", offlineBookingReference)
+        .eq("phone", cleanPhone)
+        .in("status", ["Pending", "Under Review", "Approved"])
+        .limit(1);
+
+      if (offlineDupErr) console.error("Error checking offline duplicates:", offlineDupErr);
+
+      if (existingOffline && existingOffline.length > 0) {
+        return {
+          success: false,
+          error: `A cancellation request for this offline booking/invoice (${offlineBookingReference}) is already under review.`,
+        };
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const storagePath = `cancellations/offline/${reqId}/${Date.now()}-${cleanFileName}`;
+
+      let { error: uploadError } = await supabaseServer.storage
+        .from("cancellation-invoices")
+        .upload(storagePath, buffer, {
+          contentType: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+          upsert: false,
+        });
+
+      if (uploadError && uploadError.message?.toLowerCase().includes("not found")) {
+        console.log("Bucket 'cancellation-invoices' not found. Creating private bucket...");
+        const { error: createErr } = await supabaseServer.storage.createBucket("cancellation-invoices", {
+          public: false,
+          fileSizeLimit: 5242880,
+        });
+        if (!createErr) {
+          const retryRes = await supabaseServer.storage
+            .from("cancellation-invoices")
+            .upload(storagePath, buffer, {
+              contentType: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+              upsert: false,
+            });
+          uploadError = retryRes.error;
+        }
+      }
+
+      if (uploadError) {
+        console.error("Supabase Storage offline cancellation bill upload error:", uploadError);
+        return {
+          success: false,
+          error: "Failed to upload original booking bill/invoice: " + uploadError.message,
+        };
+      }
+
+      const { data: newRecord, error: insertError } = await supabaseServer
+        .from("booking_cancellations")
+        .insert({
+          cancellation_request_id: reqId,
+          booking_id: offlineBookingReference,
+          customer_name: offlineCustomerName,
+          phone: cleanPhone,
+          email: offlineEmail || "",
+          package_name: offlinePackageName,
+          travel_date: offlineTravelDate,
+          cancellation_reason: cancellationReason,
+          refund_policy_accepted: true,
+          status: "Pending",
+          refund_status: "Not Initiated",
+          booking_source: "offline",
+          offline_booking_reference: offlineBookingReference,
+          offline_customer_name: offlineCustomerName,
+          offline_phone: cleanPhone,
+          offline_email: offlineEmail || "",
+          offline_package_name: offlinePackageName,
+          offline_travel_date: offlineTravelDate,
+          offline_travel_class: offlineTravelClass || "Standard",
+          offline_travellers: offlineTravellers,
+          offline_package_amount: offlinePackageAmount,
+          offline_amount_paid: offlineAmountPaid,
+          offline_payment_mode: offlinePaymentMode || "Cash",
+          offline_booking_office: offlineBookingOffice || "",
+          booking_verification_status: "Pending Verification",
+          invoice_file_path: storagePath,
+          invoice_file_name: file.name,
+          invoice_file_type: file.type || (fileExt === "pdf" ? "application/pdf" : `image/${fileExt}`),
+          invoice_file_size: file.size,
+          invoice_uploaded_at: new Date().toISOString(),
+          invoice_verification_status: "Pending Verification",
+          admin_notes: "",
+        })
+        .select("id");
+
+      if (insertError) {
+        console.error("Error inserting offline cancellation record:", insertError);
+        await supabaseServer.storage.from("cancellation-invoices").remove([storagePath]).catch(() => {});
+        return { success: false, error: "Failed to save offline cancellation request: " + insertError.message };
+      }
+
+      const cancellationId = newRecord && newRecord.length > 0 ? newRecord[0].id : null;
+
+      await createAdminNotification(
+        "cancellation_request",
+        `New Offline Booking Cancellation Request (${reqId})`,
+        `Request ID: ${reqId} | Offline Invoice: ${offlineBookingReference} | Customer: ${offlineCustomerName} | Phone: ${cleanPhone} | Package: ${offlinePackageName} | Paid: ₹${offlineAmountPaid}. Manual bill verification required.`,
+        "cancellations",
+        reqId
+      ).catch(() => {});
+
+      await sendAdminCancellationNotificationEmail({
+        bookingId: `OFFLINE: ${offlineBookingReference} (Req: ${reqId})`,
+        customerName: offlineCustomerName,
+        phone: cleanPhone,
+        email: offlineEmail || "N/A",
+        packageName: offlinePackageName,
+        travelDate: offlineTravelDate,
+        cancellationReason: cancellationReason,
+      }).catch(() => {});
+
+      if (offlineEmail && offlineEmail.includes("@")) {
+        try {
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || "smtp.gmail.com",
+            port: parseInt(process.env.SMTP_PORT || "587"),
+            secure: false,
+            auth: {
+              user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+              pass: process.env.SMTP_PASS,
+            },
+          });
+
+          const mailOptions = {
+            from: `"Kamakhya Yatra Team" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+            to: offlineEmail.trim(),
+            subject: `Offline Booking Cancellation Request Received - [${reqId}]`,
+            text: `Namaste ${offlineCustomerName.trim()},\n\nWe have received your offline/counter booking cancellation request.\n\nCancellation Request ID: ${reqId}\nOffline Invoice Number: ${offlineBookingReference}\nPackage: ${offlinePackageName}\nTravel Date: ${offlineTravelDate}\nAmount Paid: ₹${offlineAmountPaid}\nStatus: Pending Verification\n\nYour original booking bill/invoice (${file.name}) will be manually verified by Kamakhya Yatra officers before processing the cancellation. Please note that submission of a request does not guarantee cancellation or refund approval.\n\nThank you,\nKamakhya Yatra Team\nhttps://www.kamakhyayatra.com`,
+          };
+
+          await transporter.sendMail(mailOptions);
+        } catch (emailErr) {
+          console.error("Failed to send offline customer email:", emailErr);
+        }
+      }
+
+      return {
+        success: true,
+        id: cancellationId,
+        cancellationRequestId: reqId,
+        bookingReference: offlineBookingReference,
+        bookingSource: "offline",
+      };
+    }
+  } catch (err: any) {
+    console.error("Cancellation submission error:", err);
+    return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function updateCancellationBookingVerificationStatus(id: number, status: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
       .from("booking_cancellations")
-      .insert({
-        booking_id: data.bookingId.trim(),
-        customer_name: data.customerName.trim(),
-        phone: cleanedPhone,
-        email: data.email.trim(),
-        package_name: data.packageName.trim(),
-        travel_date: data.travelDate.trim(),
-        cancellation_reason: data.cancellationReason.trim(),
-        refund_policy_accepted: data.refundPolicyAccepted,
-        status: "Pending",
-        refund_status: "Eligible",
-        admin_notes: ""
+      .update({
+        booking_verification_status: status,
+        updated_at: new Date().toISOString(),
       })
-      .select("id");
+      .eq("id", id);
 
-    if (insertError) {
-      console.error("Error inserting cancellation:", insertError);
-      return { success: false, error: insertError.message };
+    if (error) {
+      console.error("Error updating booking verification status:", error);
+      return { success: false, error: error.message };
     }
 
-    // Create admin notification
-    await createAdminNotification(
-      "cancellation_request",
-      `Cancellation Request: ${data.bookingId.trim()}`,
-      `Cancellation request submitted by ${data.customerName.trim()} for package ${data.packageName.trim()}. Reason: ${data.cancellationReason.trim()}`,
-      "cancellations",
-      data.bookingId.trim()
-    ).catch(err => console.error("Failed to create admin cancellation notification:", err));
+    return { success: true };
+  } catch (err: any) {
+    console.error("updateCancellationBookingVerificationStatus error:", err);
+    return { success: false, error: err.message };
+  }
+}
 
-    // Send admin notification email
-    await sendAdminCancellationNotificationEmail({
-      bookingId: data.bookingId.trim(),
-      customerName: data.customerName.trim(),
-      phone: cleanedPhone,
-      email: data.email.trim(),
-      packageName: data.packageName.trim(),
-      travelDate: data.travelDate.trim(),
-      cancellationReason: data.cancellationReason.trim()
-    }).catch(err => console.error("Failed to send admin cancellation email:", err));
+export async function getCancellationInvoiceSignedUrl(id: number, download: boolean = false) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
 
-    // Send customer email notification via SMTP
-    try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || "smtp.gmail.com",
-        port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: false,
-        auth: {
-          user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
-          pass: process.env.SMTP_PASS,
-        },
-      });
+  try {
+    const { data: record, error: fetchErr } = await supabaseServer
+      .from("booking_cancellations")
+      .select("invoice_file_path, invoice_file_name, invoice_file_type")
+      .eq("id", id)
+      .single();
 
-      const mailOptions = {
-        from: `"Kamakhya Yatra Team" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
-        to: data.email.trim(),
-        subject: "Booking Cancellation Request Received",
-        text: `Namaste ${data.customerName.trim()},\n\nWe have received your booking cancellation request.\n\nBooking ID: ${data.bookingId.trim()}\nPackage: ${data.packageName.trim()}\n\nOur team will contact you within 24-72 hours.\n\nRefund eligibility will be reviewed according to the existing Refund Policy available on the website.\n\nThank you,\nKamakhya Yatra Team\nhttps://www.kamakhyayatra.com`,
-      };
+    if (fetchErr || !record || !record.invoice_file_path) {
+      return { success: false, error: "No invoice file attached to this cancellation record." };
+    }
 
-      await transporter.sendMail(mailOptions);
-    } catch (emailErr) {
-      console.error("Failed to send cancellation email:", emailErr);
+    const options: any = download ? { download: record.invoice_file_name || true } : {};
+
+    const { data: signedData, error: signErr } = await supabaseServer.storage
+      .from("cancellation-invoices")
+      .createSignedUrl(record.invoice_file_path, 3600, options);
+
+    if (signErr || !signedData?.signedUrl) {
+      console.error("Signed URL creation error:", signErr);
+      return { success: false, error: "Failed to generate secure URL: " + (signErr?.message || "Unknown error") };
     }
 
     return {
       success: true,
-      id: newRecord && newRecord.length > 0 ? newRecord[0].id : null,
+      signedUrl: signedData.signedUrl,
+      fileName: record.invoice_file_name,
+      fileType: record.invoice_file_type,
     };
   } catch (err: any) {
-    console.error("Cancellation submission error:", err);
+    console.error("getCancellationInvoiceSignedUrl error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateCancellationInvoiceVerificationStatus(id: number, status: string) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabaseServer
+      .from("booking_cancellations")
+      .update({
+        invoice_verification_status: status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating invoice verification status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("updateCancellationInvoiceVerificationStatus error:", err);
     return { success: false, error: err.message };
   }
 }

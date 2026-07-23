@@ -4,18 +4,15 @@ import { supabaseServer } from "@/utils/supabaseServer";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.kamakhyayatra.com"),
-  title: {
-    default: "Kamakhya Yatra - Premium Tour & Travel Company",
-    template: "%s | Kamakhya Yatra",
-  },
-  description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
-  keywords: ["Kamakhya Yatra", "Char Dham Yatra", "Amarnath Yatra", "Spiritual Tour Packages", "Nepal Muktinath Yatra", "Bhutan Tour"],
+  title: "Kamakhya Yatra | Tour Packages from Ranchi & Across India",
+  description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan. Premium domestic and international tour packages with PAN-India boarding connectivity, offering unmatched luxury, safety, and comfort.",
+  keywords: ["Kamakhya Yatra", "Tour Packages from Ranchi", "Domestic Tour Packages India", "Religious Tour Packages India", "Nepal Tour", "Bhutan Tour"],
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "Kamakhya Yatra - Premium Tour & Travel Company",
-    description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
+    title: "Kamakhya Yatra | Tour Packages from Ranchi & Across India",
+    description: "Premium domestic, international, and pilgrimage tour packages with PAN-India boarding connectivity.",
     url: "https://www.kamakhyayatra.com",
     siteName: "Kamakhya Yatra",
     images: [
@@ -31,8 +28,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kamakhya Yatra - Premium Tour & Travel Company",
-    description: "Experience divine journeys and spiritual pilgrimages across India, Nepal and Bhutan with unmatched luxury, safety and comfort.",
+    title: "Kamakhya Yatra | Tour Packages from Ranchi & Across India",
+    description: "Premium domestic, international, and pilgrimage tour packages with PAN-India boarding connectivity.",
     images: ["/hero-kamakhya.png"],
   },
   verification: {

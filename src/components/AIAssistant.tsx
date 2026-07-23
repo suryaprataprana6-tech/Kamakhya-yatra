@@ -287,9 +287,14 @@ export default function AIAssistant() {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false); // floating widget state
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   const msgIdRef = useRef(1);
 
   // Auto-scroll to bottom
@@ -393,7 +398,11 @@ export default function AIAssistant() {
               >
                 {renderMarkdown(msg.content)}
                 <span className="block text-[10px] mt-2 opacity-50">
-                  {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {isMounted ? (
+                    msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  ) : (
+                    <span className="invisible">00:00 PM</span>
+                  )}
                 </span>
               </div>
               {msg.role === "user" && (
