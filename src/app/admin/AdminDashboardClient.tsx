@@ -6,8 +6,10 @@ import Link from "next/link";
 import { Search, LogOut, Edit3, Settings, Plus, Image as ImageIcon, MapPin, Tag, Trash2, Users, TrendingUp, Activity, RefreshCw, Save, MessageSquare, Check, Mail, Download, Bell, CreditCard, AlertTriangle, Calendar, Eye, FileCheck, FileText } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { logoutAdmin, deletePackage } from "./actions";
+import { logoutAdmin, deletePackage, verifyBookingPayment, rejectBookingPayment, confirmBookingAndGenerateInvoice } from "./actions";
 import FaresClient from "./fares/FaresClient";
+import BookingInvoice, { InvoiceData } from "@/components/BookingInvoice";
+import { downloadInvoicePDF, printInvoice } from "@/utils/pdfGenerator";
 
 interface AdminDashboardClientProps {
   initialPackages: any[];
@@ -42,6 +44,18 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
   const [bookingsNotes, setBookingsNotes] = useState<Record<number, string>>({});
   const [savingBookingNotesId, setSavingBookingNotesId] = useState<number | null>(null);
   const [bookingStaffMap, setBookingStaffMap] = useState<Record<number, string>>({});
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] = useState<any | null>(null);
+
+  // 2-Stage Verification Modals state
+  const [verifyPaymentModalBooking, setVerifyPaymentModalBooking] = useState<any | null>(null);
+  const [verifiedAmountInput, setVerifiedAmountInput] = useState<string>("");
+  const [verifyNotesInput, setVerifyNotesInput] = useState<string>("");
+  
+  const [rejectPaymentModalBooking, setRejectPaymentModalBooking] = useState<any | null>(null);
+  const [rejectNotesInput, setRejectNotesInput] = useState<string>("");
+
+  const [confirmBookingModalBooking, setConfirmBookingModalBooking] = useState<any | null>(null);
+  const [isProcessingVerification, setIsProcessingVerification] = useState(false);
   
   // Leads management states
   const [leads, setLeads] = useState<any[]>([]);
@@ -1582,157 +1596,262 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
-                            <th className="p-4">Booking ID</th>
+                            <th className="p-4">Booking & Ref</th>
                             <th className="p-4">Customer</th>
-                            <th className="p-4">Package</th>
-                            <th className="p-4">Class & Cost</th>
-                            <th className="p-4">Travel</th>
-                            <th className="p-4">Booking Status</th>
-                            <th className="p-4">Payment Status</th>
-                            <th className="p-4">Payment</th>
-                            <th className="p-4">Assigned</th>
+                            <th className="p-4">Package & Class</th>
+                            <th className="p-4">Verification Badges</th>
+                            <th className="p-4">Financial Status</th>
+                            <th className="p-4">Payment Proof</th>
+                            <th className="p-4 text-center">Verification Actions</th>
                             <th className="p-4">Admin Notes</th>
-                            <th className="p-4 text-right">Actions</th>
+                            <th className="p-4 text-right">Invoice & PDF</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs">
                           {filteredBookings.length > 0 ? (
-                            filteredBookings.map((booking) => (
-                              <tr key={booking.id} className="hover:bg-slate-50/30 transition align-top">
-                                <td className="p-4 font-bold text-[#0b1c3e]">
-                                  <div className="flex flex-col gap-1">
-                                    <span>{booking.booking_reference}</span>
-                                    <span className="text-[10px] text-slate-400">ID #{booking.id}</span>
-                                    {booking.booking_status === "Confirmed" && Number(booking.balance_amount) > 0 && (
-                                      <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
-                                        Balance Payment Pending
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-extrabold text-slate-800 text-sm">{booking.customer_name}</span>
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-slate-500">📞 {booking.phone}</span>
-                                      <a 
-                                        href={`https://wa.me/${booking.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Namaste ${booking.customer_name}, your booking request for ${booking.package_name} is under review. Please complete any pending payments if not done yet.`)}`} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer" 
-                                        className="text-[#25D366] hover:opacity-80 ml-1"
-                                        title="Message on WhatsApp"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/></svg>
-                                      </a>
+                            filteredBookings.map((booking) => {
+                              const isBookingConfirmed = booking.booking_verification_status === "Confirmed" || booking.booking_status === "Confirmed";
+                              const isPaymentVerified = booking.payment_verification_status === "Verified";
+                              const isPaymentMismatch = booking.payment_verification_status === "Mismatch / Rejected";
+                              
+                              const totalCost = Number(booking.package_cost || booking.booking_amount || 0);
+                              const claimedAmt = Number(booking.customer_submitted_amount || booking.advance_amount || 0);
+                              const verifiedAmt = Number(booking.admin_verified_amount || (isPaymentVerified ? claimedAmt : 0));
+                              const balanceDue = Number(booking.balance_amount || Math.max(0, totalCost - verifiedAmt));
+
+                              return (
+                                <tr key={booking.id} className="hover:bg-slate-50/30 transition align-top">
+                                  {/* Booking & Ref */}
+                                  <td className="p-4 font-bold text-[#0b1c3e]">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-sm font-extrabold">{booking.booking_reference}</span>
+                                      <span className="text-[10px] text-slate-400">DB ID #{booking.id}</span>
+                                      {booking.invoice_number && (
+                                        <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded self-start mt-0.5">
+                                          {booking.invoice_number}
+                                        </span>
+                                      )}
                                     </div>
-                                    <span className="text-slate-400 text-[11px]">{booking.email}</span>
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-semibold text-slate-700">{booking.package_name}</span>
-                                    <span className="text-slate-500">👥 {booking.number_of_travellers} Travellers</span>
-                                    <span className="text-slate-500">📍 {booking.boarding_point}</span>
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-bold text-[#0b1c3e]">{booking.travel_class || "Not Specified"}</span>
-                                    <span className="text-slate-500 text-xs">Total: ₹{Number(booking.package_cost || booking.booking_amount || 0).toLocaleString("en-IN")}</span>
-                                    <span className="text-slate-400 text-[10px]">Bal: ₹{Number(booking.balance_amount || 0).toLocaleString("en-IN")}</span>
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="text-slate-700 font-semibold">{new Date(booking.travel_date).toLocaleDateString("en-IN")}</span>
-                                    <span className="text-slate-400">Advance: ₹{Number(booking.advance_amount || 0).toLocaleString("en-IN")}</span>
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <select
-                                    value={booking.booking_status || "Pending"}
-                                    onChange={(e) => handleBookingStatusChange(booking.id, e.target.value)}
-                                    className="w-full text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer bg-slate-50 text-slate-700"
-                                  >
-                                    <option value="Pending">Pending</option>
-                                    <option value="Pending Payment">Pending Payment</option>
-                                    <option value="Payment Received">Payment Received</option>
-                                    <option value="Confirmed">Confirmed</option>
-                                    <option value="Balance Pending">Balance Pending</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                  </select>
-                                </td>
-                                <td className="p-4">
-                                  <select
-                                    value={booking.payment_status || "Unpaid"}
-                                    onChange={(e) => handleBookingPaymentStatusChange(booking.id, e.target.value)}
-                                    className="w-full text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border outline-none cursor-pointer bg-slate-50 text-slate-700"
-                                  >
-                                    <option value="Unpaid">Unpaid</option>
-                                    <option value="Payment Submitted">Payment Submitted</option>
-                                    <option value="Under Verification">Under Verification</option>
-                                    <option value="Partially Paid">Partially Paid</option>
-                                    <option value="Paid">Paid</option>
-                                    <option value="Refunded">Refunded</option>
-                                  </select>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="text-slate-700 font-semibold">Txn: {booking.transaction_id || "—"}</span>
-                                    {booking.payment_screenshot ? (
-                                      <a href={booking.payment_screenshot} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View Screenshot</a>
-                                    ) : (
-                                      <span className="text-slate-400">No screenshot</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-2">
-                                    <input
-                                      type="text"
-                                      value={bookingStaffMap[booking.id] || ""}
-                                      onChange={(e) => setBookingStaffMap(prev => ({ ...prev, [booking.id]: e.target.value }))}
-                                      placeholder="Staff"
-                                      className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:border-[#0b1c3e]"
-                                    />
-                                    <button
-                                      onClick={() => handleAssignBookingStaff(booking.id)}
-                                      className="bg-[#0b1c3e] text-white px-3 py-2 rounded-lg text-[10px] font-extrabold uppercase"
-                                    >
-                                      Assign
-                                    </button>
-                                  </div>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col gap-2">
-                                    <textarea
-                                      rows={2}
-                                      value={bookingsNotes[booking.id] || ""}
-                                      onChange={(e) => setBookingsNotes(prev => ({ ...prev, [booking.id]: e.target.value }))}
-                                      placeholder="Admin notes"
-                                      className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:border-[#0b1c3e] resize-none"
-                                    />
-                                    <button
-                                      onClick={() => handleSaveBookingNotes(booking.id)}
-                                      disabled={savingBookingNotesId === booking.id}
-                                      className="bg-slate-800 text-white px-3 py-2 rounded-lg text-[10px] font-extrabold uppercase"
-                                    >
-                                      {savingBookingNotesId === booking.id ? "Saving..." : "Save Notes"}
-                                    </button>
-                                  </div>
-                                </td>
-                                <td className="p-4 text-right">
-                                  <div className="flex flex-col gap-2 items-end">
-                                    <a href={`mailto:${booking.email}?subject=${encodeURIComponent(`Booking Update - ${booking.booking_reference}`)}`} className="text-blue-500 hover:underline text-[11px] font-bold">Email</a>
-                                    <a href={getWhatsAppLink(booking.phone, `Hello ${booking.customer_name},\n\nBooking ID:\n${booking.booking_reference}\n\nPackage:\n${booking.package_name}\n\nStatus:\n${booking.booking_status}\n\nThank you.\n\nKamakhya Yatra Team`)} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline text-[11px] font-bold">WhatsApp</a>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
+                                  </td>
+
+                                  {/* Customer */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="font-extrabold text-slate-800 text-sm">{booking.customer_name}</span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-slate-500">📞 {booking.phone}</span>
+                                      </div>
+                                      <span className="text-slate-400 text-[11px]">{booking.email}</span>
+                                    </div>
+                                  </td>
+
+                                  {/* Package & Class */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="font-extrabold text-slate-800">{booking.package_name}</span>
+                                      <span className="text-amber-700 font-extrabold text-xs">Class: {booking.travel_class || "Standard"}</span>
+                                      <span className="text-slate-500 text-[11px]">👥 {booking.number_of_travellers} Pax | 📅 {new Date(booking.travel_date).toLocaleDateString("en-IN")}</span>
+                                    </div>
+                                  </td>
+
+                                  {/* Verification Badges */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-2">
+                                      {/* Booking Verification Badge */}
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] font-extrabold uppercase text-slate-400">Booking Status</span>
+                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase w-fit ${
+                                          isBookingConfirmed
+                                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                            : booking.booking_verification_status === "Rejected"
+                                            ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                            : "bg-amber-100 text-amber-800 border border-amber-200"
+                                        }`}>
+                                          {isBookingConfirmed ? "✓ Confirmed" : booking.booking_verification_status === "Rejected" ? "✕ Rejected" : "⏳ Pending Review"}
+                                        </span>
+                                      </div>
+
+                                      {/* Payment Verification Badge */}
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] font-extrabold uppercase text-slate-400">Payment Verification</span>
+                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase w-fit ${
+                                          isPaymentVerified
+                                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                            : isPaymentMismatch
+                                            ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                            : "bg-amber-100 text-amber-800 border border-amber-200"
+                                        }`}>
+                                          {isPaymentVerified ? "✓ Payment Verified" : isPaymentMismatch ? "⚠️ Mismatch / Rejected" : "⏳ Verification Pending"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Financial Status */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-1 text-xs">
+                                      <div className="flex justify-between gap-2">
+                                        <span className="text-slate-400 font-bold">Total:</span>
+                                        <strong className="text-slate-800">₹{totalCost.toLocaleString("en-IN")}</strong>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <span className="text-slate-400 font-bold">Submitted:</span>
+                                        <strong className="text-blue-600">₹{claimedAmt.toLocaleString("en-IN")}</strong>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <span className="text-slate-400 font-bold">Verified Paid:</span>
+                                        <strong className="text-emerald-600">₹{verifiedAmt.toLocaleString("en-IN")}</strong>
+                                      </div>
+                                      <div className="flex justify-between gap-2 pt-1 border-t border-slate-100">
+                                        <span className="text-rose-500 font-extrabold">Balance:</span>
+                                        <strong className="text-rose-600 font-extrabold">₹{balanceDue.toLocaleString("en-IN")}</strong>
+                                      </div>
+                                      <span className={`mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded text-center ${
+                                        booking.payment_status === "Paid" || balanceDue === 0
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : booking.payment_status === "Partially Paid" || verifiedAmt > 0
+                                          ? "bg-amber-100 text-amber-800"
+                                          : "bg-slate-100 text-slate-600"
+                                      }`}>
+                                        {balanceDue === 0 && totalCost > 0 ? "PAID" : verifiedAmt > 0 ? "PARTIALLY PAID" : "UNPAID"}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* Payment Proof */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-1 max-w-[160px]">
+                                      <span className="text-slate-700 font-bold truncate" title={booking.transaction_id}>
+                                        Txn: {booking.transaction_id || "—"}
+                                      </span>
+                                      {booking.payment_screenshot ? (
+                                        <a 
+                                          href={booking.payment_screenshot} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer" 
+                                          className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1 text-[11px]"
+                                        >
+                                          <Eye className="w-3 h-3" /> View Proof
+                                        </a>
+                                      ) : (
+                                        <span className="text-slate-400 text-[10px] italic">No proof uploaded</span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Verification Actions */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-2 items-center">
+                                      {/* STEP 1: Verify Payment Action */}
+                                      {!isPaymentVerified ? (
+                                        <button
+                                          onClick={() => {
+                                            setVerifyPaymentModalBooking(booking);
+                                            setVerifiedAmountInput((booking.customer_submitted_amount || booking.advance_amount || 5000).toString());
+                                            setVerifyNotesInput(booking.admin_payment_notes || "");
+                                          }}
+                                          className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-[10px] uppercase tracking-wider transition shadow-sm"
+                                        >
+                                          VERIFY PAYMENT
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            setVerifyPaymentModalBooking(booking);
+                                            setVerifiedAmountInput((booking.admin_verified_amount || booking.advance_amount || 0).toString());
+                                            setVerifyNotesInput(booking.admin_payment_notes || "");
+                                          }}
+                                          className="w-full py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-extrabold rounded-lg text-[9px] uppercase tracking-wider transition"
+                                        >
+                                          ✓ Verified (Edit)
+                                        </button>
+                                      )}
+
+                                      {!isPaymentVerified && (
+                                        <button
+                                          onClick={() => {
+                                            setRejectPaymentModalBooking(booking);
+                                            setRejectNotesInput(booking.admin_payment_notes || "");
+                                          }}
+                                          className="w-full py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-lg text-[9px] uppercase tracking-wider transition"
+                                        >
+                                          MISMATCH / REJECT
+                                        </button>
+                                      )}
+
+                                      {/* STEP 2: Confirm Booking Action */}
+                                      {!isBookingConfirmed ? (
+                                        <button
+                                          onClick={() => {
+                                            if (!isPaymentVerified) {
+                                              alert("SECURITY CONTROL: Payment verification is required first before confirming a booking.");
+                                              return;
+                                            }
+                                            setConfirmBookingModalBooking(booking);
+                                          }}
+                                          disabled={!isPaymentVerified}
+                                          className={`w-full py-1.5 px-3 font-extrabold rounded-lg text-[10px] uppercase tracking-wider transition ${
+                                            isPaymentVerified
+                                              ? "bg-[#0b1c3e] hover:bg-[#1e3c72] text-white shadow-md cursor-pointer"
+                                              : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                                          }`}
+                                          title={!isPaymentVerified ? "Must verify payment first" : "Confirm booking & issue Final Invoice"}
+                                        >
+                                          CONFIRM BOOKING
+                                        </button>
+                                      ) : (
+                                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 text-center w-full">
+                                          ✓ CONFIRMED
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Admin Notes */}
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-2">
+                                      <textarea
+                                        rows={2}
+                                        value={bookingsNotes[booking.id] || ""}
+                                        onChange={(e) => setBookingsNotes(prev => ({ ...prev, [booking.id]: e.target.value }))}
+                                        placeholder="Admin notes"
+                                        className="p-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 outline-none focus:border-[#0b1c3e] resize-none"
+                                      />
+                                      <button
+                                        onClick={() => handleSaveBookingNotes(booking.id)}
+                                        disabled={savingBookingNotesId === booking.id}
+                                        className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-extrabold uppercase"
+                                      >
+                                        {savingBookingNotesId === booking.id ? "Saving..." : "Save Notes"}
+                                      </button>
+                                    </div>
+                                  </td>
+
+                                  {/* Invoice & PDF Actions */}
+                                  <td className="p-4 text-right">
+                                    <div className="flex flex-col gap-2 items-end">
+                                      <button
+                                        onClick={() => setSelectedInvoiceBooking(booking)}
+                                        className={`text-[11px] font-black flex items-center gap-1 px-3 py-1.5 rounded-xl border transition ${
+                                          isBookingConfirmed
+                                            ? "bg-[#0b1c3e] text-[#d4af37] border-[#0b1c3e] hover:bg-[#1e3c72]"
+                                            : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                                        }`}
+                                      >
+                                        <FileText className="w-3.5 h-3.5" /> 
+                                        {isBookingConfirmed ? "Final Invoice PDF" : "Provisional Receipt"}
+                                      </button>
+
+                                      <a href={`mailto:${booking.email}?subject=${encodeURIComponent(`Booking Status - ${booking.booking_reference}`)}`} className="text-blue-500 hover:underline text-[11px] font-bold">Email Customer</a>
+                                      <a href={getWhatsAppLink(booking.phone, `Namaste ${booking.customer_name},\n\nBooking Ref:\n${booking.booking_reference}\n\nPackage:\n${booking.package_name}\n\nVerification Status:\n${booking.booking_verification_status || 'Pending Verification'}\n\nThank you.\n\nKamakhya Yatra Team`)} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline text-[11px] font-bold">WhatsApp</a>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           ) : (
                             <tr>
-                              <td colSpan={10} className="text-center py-16 text-slate-400 font-bold">
+                              <td colSpan={9} className="text-center py-16 text-slate-400 font-bold">
                                 No bookings match your filters.
                               </td>
                             </tr>
@@ -2859,6 +2978,297 @@ export default function AdminDashboardClient({ initialPackages }: AdminDashboard
                       Close Report
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* VERIFY PAYMENT MODAL */}
+          {verifyPaymentModalBooking && (
+            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col gap-4">
+                <div className="border-b pb-3">
+                  <h3 className="font-extrabold text-[#0b1c3e] text-lg">Verify Customer Payment</h3>
+                  <p className="text-xs text-slate-500">Booking Ref: {verifyPaymentModalBooking.booking_reference}</p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl flex flex-col gap-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Customer:</span>
+                    <strong className="text-slate-800">{verifyPaymentModalBooking.customer_name}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Package:</span>
+                    <strong className="text-slate-800">{verifyPaymentModalBooking.package_name} ({verifyPaymentModalBooking.travel_class})</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Total Package Amount:</span>
+                    <strong className="text-slate-800">₹{Number(verifyPaymentModalBooking.package_cost || verifyPaymentModalBooking.booking_amount || 0).toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Claimed Amount Submitted:</span>
+                    <strong className="text-blue-600 font-black">₹{Number(verifyPaymentModalBooking.customer_submitted_amount || verifyPaymentModalBooking.advance_amount || 0).toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Transaction ID:</span>
+                    <span className="font-mono text-slate-700">{verifyPaymentModalBooking.transaction_id || "—"}</span>
+                  </div>
+                  {verifyPaymentModalBooking.payment_screenshot && (
+                    <a href={verifyPaymentModalBooking.payment_screenshot} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline mt-1 text-[11px]">
+                      View Uploaded Screenshot ↗
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-[#0b1c3e]">Admin Verified Amount Paid (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={verifiedAmountInput}
+                    onChange={(e) => setVerifiedAmountInput(e.target.value)}
+                    className="p-3 border border-slate-200 rounded-xl text-sm font-extrabold focus:outline-none focus:border-[#0b1c3e]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-[#0b1c3e]">Admin Payment Notes (Optional)</label>
+                  <textarea
+                    rows={2}
+                    value={verifyNotesInput}
+                    onChange={(e) => setVerifyNotesInput(e.target.value)}
+                    placeholder="Enter payment verification details..."
+                    className="p-3 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#0b1c3e]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setVerifyPaymentModalBooking(null)}
+                    disabled={isProcessingVerification}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const amt = parseFloat(verifiedAmountInput);
+                      if (isNaN(amt) || amt < 0) { alert("Please enter a valid amount."); return; }
+                      setIsProcessingVerification(true);
+                      const res = await verifyBookingPayment(verifyPaymentModalBooking.id, amt, verifyNotesInput);
+                      setIsProcessingVerification(false);
+                      if (res.success) {
+                        alert("Payment verified successfully!");
+                        setVerifyPaymentModalBooking(null);
+                        const { getBookingsData } = await import("./actions");
+                        const fresh = await getBookingsData();
+                        if (fresh.success && fresh.data) setBookings(fresh.data);
+                      } else {
+                        alert("Verification failed: " + res.error);
+                      }
+                    }}
+                    disabled={isProcessingVerification}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md"
+                  >
+                    {isProcessingVerification ? "Verifying..." : "Confirm Payment Verified"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* REJECT PAYMENT MODAL */}
+          {rejectPaymentModalBooking && (
+            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col gap-4">
+                <div className="border-b pb-3">
+                  <h3 className="font-extrabold text-rose-600 text-lg">Mark Payment Mismatch / Reject</h3>
+                  <p className="text-xs text-slate-500">Booking Ref: {rejectPaymentModalBooking.booking_reference}</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-[#0b1c3e]">Reason for Mismatch / Rejection</label>
+                  <textarea
+                    rows={3}
+                    value={rejectNotesInput}
+                    onChange={(e) => setRejectNotesInput(e.target.value)}
+                    placeholder="Describe transaction mismatch or fake screenshot detail..."
+                    className="p-3 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setRejectPaymentModalBooking(null)}
+                    disabled={isProcessingVerification}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsProcessingVerification(true);
+                      const res = await rejectBookingPayment(rejectPaymentModalBooking.id, rejectNotesInput);
+                      setIsProcessingVerification(false);
+                      if (res.success) {
+                        alert("Payment marked as Mismatch.");
+                        setRejectPaymentModalBooking(null);
+                        const { getBookingsData } = await import("./actions");
+                        const fresh = await getBookingsData();
+                        if (fresh.success && fresh.data) setBookings(fresh.data);
+                      } else {
+                        alert("Rejection failed: " + res.error);
+                      }
+                    }}
+                    disabled={isProcessingVerification}
+                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md"
+                  >
+                    {isProcessingVerification ? "Saving..." : "Save Mismatch Status"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CONFIRM BOOKING MODAL */}
+          {confirmBookingModalBooking && (
+            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-100 flex flex-col gap-4">
+                <div className="border-b pb-3">
+                  <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-widest">Step 2 Confirmation</span>
+                  <h3 className="font-extrabold text-[#0b1c3e] text-xl mt-0.5">CONFIRM BOOKING</h3>
+                  <p className="text-xs text-slate-500">Booking Ref: {confirmBookingModalBooking.booking_reference}</p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl flex flex-col gap-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Customer:</span>
+                    <strong className="text-slate-800">{confirmBookingModalBooking.customer_name}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Package:</span>
+                    <strong className="text-slate-800">{confirmBookingModalBooking.package_name} ({confirmBookingModalBooking.travel_class})</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Total Package Amount:</span>
+                    <strong className="text-slate-800">₹{Number(confirmBookingModalBooking.package_cost || confirmBookingModalBooking.booking_amount || 0).toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Verified Amount Paid:</span>
+                    <strong className="text-emerald-600 font-black">₹{Number(confirmBookingModalBooking.admin_verified_amount || confirmBookingModalBooking.advance_amount || 0).toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-slate-200">
+                    <span className="text-rose-500 font-extrabold">Balance Due:</span>
+                    <strong className="text-rose-600 font-black">
+                      ₹{Math.max(0, Number(confirmBookingModalBooking.package_cost || confirmBookingModalBooking.booking_amount || 0) - Number(confirmBookingModalBooking.admin_verified_amount || confirmBookingModalBooking.advance_amount || 0)).toLocaleString("en-IN")}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                  <p className="text-xs font-bold text-emerald-800 leading-relaxed">
+                    ℹ️ Confirming this booking will generate the customer's Final Verified Invoice and lock the historical record permanently against future fare changes.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setConfirmBookingModalBooking(null)}
+                    disabled={isProcessingVerification}
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsProcessingVerification(true);
+                      const res = await confirmBookingAndGenerateInvoice(confirmBookingModalBooking.id);
+                      setIsProcessingVerification(false);
+                      if (res.success) {
+                        alert(`Booking CONFIRMED! Final Invoice generated: ${res.invoiceNumber}`);
+                        setConfirmBookingModalBooking(null);
+                        const { getBookingsData } = await import("./actions");
+                        const fresh = await getBookingsData();
+                        if (fresh.success && fresh.data) setBookings(fresh.data);
+                      } else {
+                        alert("Confirmation failed: " + res.error);
+                      }
+                    }}
+                    disabled={isProcessingVerification}
+                    className="px-6 py-2.5 rounded-xl bg-[#0b1c3e] hover:bg-[#1e3c72] text-white font-extrabold text-xs shadow-lg"
+                  >
+                    {isProcessingVerification ? "Confirming..." : "Confirm Booking & Generate Final Invoice"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ADMIN INVOICE MODAL */}
+          {selectedInvoiceBooking && (
+            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col gap-4 relative shadow-2xl">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-[#0b1c3e] text-lg">
+                      {selectedInvoiceBooking.booking_verification_status === "Confirmed" ? "Official Final Invoice" : "Provisional Booking Receipt"} — {selectedInvoiceBooking.invoice_number || selectedInvoiceBooking.booking_reference}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Ref: {selectedInvoiceBooking.booking_reference} | Customer: {selectedInvoiceBooking.customer_name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        const filename = selectedInvoiceBooking.booking_verification_status === "Confirmed"
+                          ? `Kamakhya-Yatra-Invoice-${selectedInvoiceBooking.invoice_number || selectedInvoiceBooking.booking_reference}.pdf`
+                          : `Kamakhya-Yatra-Booking-Acknowledgement-${selectedInvoiceBooking.booking_reference}.pdf`;
+                        downloadInvoicePDF("kamakhya-booking-invoice", filename);
+                      }}
+                      className="px-4 py-2 bg-[#d4af37] text-[#0b1c3e] font-black text-xs rounded-xl hover:bg-[#b8952d] transition flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download PDF
+                    </button>
+                    <button
+                      onClick={() => printInvoice()}
+                      className="px-4 py-2 bg-slate-100 text-[#0b1c3e] font-extrabold text-xs rounded-xl hover:bg-slate-200 transition flex items-center gap-1.5 font-bold"
+                    >
+                      Print
+                    </button>
+                    <button
+                      onClick={() => setSelectedInvoiceBooking(null)}
+                      className="px-3 py-2 bg-rose-50 text-rose-600 font-extrabold text-xs rounded-xl hover:bg-rose-100 transition"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
+                <div id="admin-invoice-modal-preview" className="bg-white p-2">
+                  <BookingInvoice
+                    data={selectedInvoiceBooking.invoice_snapshot ? selectedInvoiceBooking.invoice_snapshot : {
+                      documentType: selectedInvoiceBooking.booking_verification_status === "Confirmed" ? "FINAL_INVOICE" : "ACKNOWLEDGEMENT",
+                      invoiceNumber: selectedInvoiceBooking.invoice_number || `KY-INV-${selectedInvoiceBooking.booking_reference}`,
+                      bookingReference: selectedInvoiceBooking.booking_reference,
+                      bookingDate: new Date(selectedInvoiceBooking.created_at || Date.now()).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
+                      dueDate: "Before Journey",
+                      customerName: selectedInvoiceBooking.customer_name,
+                      phone: selectedInvoiceBooking.phone,
+                      email: selectedInvoiceBooking.email,
+                      packageName: selectedInvoiceBooking.package_name,
+                      travelDate: new Date(selectedInvoiceBooking.travel_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
+                      travellers: Number(selectedInvoiceBooking.number_of_travellers || 1),
+                      travelClass: selectedInvoiceBooking.travel_class || "Standard",
+                      ratePerPerson: Number(selectedInvoiceBooking.rate_per_person || (selectedInvoiceBooking.package_cost ? Math.round(selectedInvoiceBooking.package_cost / (selectedInvoiceBooking.number_of_travellers || 1)) : 24000)),
+                      totalPackageCost: Number(selectedInvoiceBooking.package_cost || 0),
+                      amountPaid: Number(selectedInvoiceBooking.admin_verified_amount || selectedInvoiceBooking.advance_amount || 0),
+                      balanceDue: Number(selectedInvoiceBooking.balance_amount || 0),
+                      paymentMethod: selectedInvoiceBooking.payment_method || "UPI",
+                      transactionId: selectedInvoiceBooking.transaction_id || "N/A",
+                      paymentStatus: selectedInvoiceBooking.payment_status || "Unpaid",
+                      bookingVerificationStatus: selectedInvoiceBooking.booking_verification_status || "Pending Verification",
+                      paymentVerificationStatus: selectedInvoiceBooking.payment_verification_status || "Pending Verification"
+                    }}
+                  />
                 </div>
               </div>
             </div>

@@ -59,10 +59,45 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-plane-fly {
-    animation-play-state: paused !important;
-  }
+/* Dedicated Print Styles — Print ONLY #kamakhya-booking-invoice within 1 A4 Page */
+@page {
+  size: A4 portrait;
+  margin: 0;
 }
 
+@media print {
+  html, body {
+    width: 210mm !important;
+    height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+  }
 
+  body * {
+    visibility: hidden !important;
+  }
+
+  #kamakhya-booking-invoice, #kamakhya-booking-invoice * {
+    visibility: visible !important;
+  }
+
+  #kamakhya-booking-invoice {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    transform: none !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    z-index: 99999 !important;
+  }
+}

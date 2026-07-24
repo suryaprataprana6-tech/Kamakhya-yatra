@@ -1446,8 +1446,15 @@ export async function submitBookingRequest(data: {
       }
     }
 
+    const computedRatePerPerson = data.packageCost && data.numberOfTravellers > 0
+      ? Math.round(data.packageCost / data.numberOfTravellers)
+      : 0;
+
     // 2. Insert record
-    const { data: record, error } = await supabaseServer
+    let record: any = null;
+    let error: any = null;
+
+    const insertResult = await supabaseServer
       .from("booking_requests")
       .insert({
         customer_name: data.customerName,
@@ -1463,6 +1470,43 @@ export async function submitBookingRequest(data: {
         advance_amount: data.advanceAmount || 5000.00,
         package_cost: data.packageCost || 0,
         balance_amount: data.balanceAmount || 0,
+        rate_per_person: computedRatePerPerson,
+        travel_class: data.travelClass || null,
+        hotel_category: data.hotelCategory || null,
+        meal_category: data.mealCategory || null,
+        transport_category: data.transportCategory || null,
+        payment_status: "Unpaid",
+        booking_status: "Pending",
+        booking_verification_status: "Pending Verification",
+        payment_verification_status: "Pending Verification",
+        customer_submitted_amount: data.advanceAmount || 5000.00,
+        admin_verified_amount: 0.00,
+        source: data.source || "Direct",
+        page_url: data.pageUrl || null,
+        utm_source: data.utmSource || null,
+        utm_campaign: data.utmCampaign || null
+      })
+      .select("*")
+      .single();
+
+    // Fallback if new verification columns are not present in Supabase DB yet
+    if (error && (error.message?.includes("Could not find the") || error.code === "PGRST204")) {
+      console.warn("Verification columns not found in database schema yet. Using legacy insert fallback...");
+      const legacyPayload = {
+        customer_name: data.customerName,
+        phone: cleanPhone,
+        email: data.email,
+        package_name: data.packageName,
+        package_id: data.packageId || null,
+        travel_date: data.travelDate,
+        boarding_point: data.boardingPoint,
+        number_of_travellers: data.numberOfTravellers,
+        special_requirements: data.specialRequirements || null,
+        booking_amount: data.packageCost || (5000.00 * data.numberOfTravellers),
+        advance_amount: data.advanceAmount || 5000.00,
+        package_cost: data.packageCost || 0,
+        balance_amount: data.balanceAmount || 0,
+        rate_per_person: computedRatePerPerson,
         travel_class: data.travelClass || null,
         hotel_category: data.hotelCategory || null,
         meal_category: data.mealCategory || null,
@@ -1473,13 +1517,93 @@ export async function submitBookingRequest(data: {
         page_url: data.pageUrl || null,
         utm_source: data.utmSource || null,
         utm_campaign: data.utmCampaign || null
-      })
-      .select("*")
-      .single();
+      };
+
+      const legacyResult = await supabaseServer
+        .from("booking_requests")
+        .insert(legacyPayload)
+        .select("*")
+        .single();
+
+      record = legacyResult.data;
+      error = legacyResult.error;
+    }
+
+    // Retry once with dynamic sequence fallback if unique constraint error occurs
+    if (error && error.message?.includes("booking_requests_invoice_number_key")) {
+      console.warn("Unique constraint collision on invoice_number. Attempting atomic sequence fallback...");
+      
+      const { data: maxRows } = await supabaseServer
+        .from("booking_requests")
+        .select("invoice_number, booking_reference, id")
+        .order("id", { ascending: false })
+        .limit(20);
+
+      let maxSeqNum = 0;
+      maxRows?.forEach((r: any) => {
+        if (r.invoice_number) {
+          const match = r.invoice_number.match(/KY-INV-\d+-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxSeqNum) maxSeqNum = num;
+          }
+        }
+        if (r.booking_reference) {
+          const match = r.booking_reference.match(/KY-BKG-\d+-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxSeqNum) maxSeqNum = num;
+          }
+        }
+        if (r.id > maxSeqNum) maxSeqNum = r.id;
+      });
+
+      const fallbackSeq = (maxSeqNum + 1).toString().padStart(6, "0");
+      const fallbackInvNum = `KY-INV-${new Date().getFullYear()}-${fallbackSeq}`;
+
+      const retryResult = await supabaseServer
+        .from("booking_requests")
+        .insert({
+          customer_name: data.customerName,
+          phone: cleanPhone,
+          email: data.email,
+          package_name: data.packageName,
+          package_id: data.packageId || null,
+          travel_date: data.travelDate,
+          boarding_point: data.boardingPoint,
+          number_of_travellers: data.numberOfTravellers,
+          special_requirements: data.specialRequirements || null,
+          booking_amount: data.packageCost || (5000.00 * data.numberOfTravellers),
+          advance_amount: data.advanceAmount || 5000.00,
+          package_cost: data.packageCost || 0,
+          balance_amount: data.balanceAmount || 0,
+          rate_per_person: computedRatePerPerson,
+          travel_class: data.travelClass || null,
+          hotel_category: data.hotelCategory || null,
+          meal_category: data.mealCategory || null,
+          transport_category: data.transportCategory || null,
+          payment_status: "Unpaid",
+          booking_status: "Pending",
+          booking_verification_status: "Pending Verification",
+          payment_verification_status: "Pending Verification",
+          customer_submitted_amount: data.advanceAmount || 5000.00,
+          admin_verified_amount: 0.00,
+          source: data.source || "Direct",
+          page_url: data.pageUrl || null,
+          utm_source: data.utmSource || null,
+          utm_campaign: data.utmCampaign || null,
+          invoice_number: fallbackInvNum
+        })
+        .select("*")
+        .single();
+
+      record = retryResult.data;
+      error = retryResult.error;
+    }
 
     if (error || !record) {
       console.error("Database insert error:", error);
-      return { success: false, error: error?.message || "Failed to create booking record." };
+      return { success: false, error: "We could not complete your booking right now. Please try again or contact support." };
     }
 
     // Create admin notification in database
@@ -1505,11 +1629,12 @@ export async function submitBookingRequest(data: {
       success: true, 
       id: record.id, 
       booking_reference: record.booking_reference,
+      invoice_number: record.invoice_number || `KY-INV-${record.booking_reference.replace("KY-BKG-", "")}`,
       advance_amount: record.advance_amount
     };
   } catch (err: any) {
     console.error("Booking request submission error:", err);
-    return { success: false, error: err.message || "An unexpected error occurred." };
+    return { success: false, error: "We could not complete your booking right now. Please try again or contact support." };
   }
 }
 
@@ -1568,16 +1693,33 @@ export async function submitBookingPayment(
     const publicUrl = publicUrlData.publicUrl;
 
     // Update database record
-    const { error: dbError } = await supabaseServer
+    let { error: dbError } = await supabaseServer
       .from("booking_requests")
       .update({
         transaction_id: transactionId,
         payment_screenshot: publicUrl,
         payment_status: "Payment Submitted",
         booking_status: "Payment Awaiting", // Awaiting verification
+        booking_verification_status: "Pending Verification",
+        payment_verification_status: "Pending Verification",
         updated_at: new Date().toISOString()
       })
       .eq("id", bookingId);
+
+    if (dbError && (dbError.message?.includes("Could not find the") || dbError.code === "PGRST204")) {
+      console.warn("Verification columns not found in database schema yet. Using legacy update fallback...");
+      const legacyUpdate = await supabaseServer
+        .from("booking_requests")
+        .update({
+          transaction_id: transactionId,
+          payment_screenshot: publicUrl,
+          payment_status: "Payment Submitted",
+          booking_status: "Payment Awaiting",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", bookingId);
+      dbError = legacyUpdate.error;
+    }
 
     if (dbError) {
       console.error("Database update error:", dbError);
@@ -1613,6 +1755,339 @@ export async function submitBookingPayment(
   } catch (err: any) {
     console.error("Payment details submission error:", err);
     return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+// ==========================================
+// ADMIN 2-STAGE VERIFICATION & INVOICE LOCKING
+// ==========================================
+
+export async function verifyBookingPayment(
+  bookingId: number,
+  verifiedAmount: number,
+  adminNotes?: string
+) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    return { success: false, error: "Unauthorized access" };
+  }
+
+  try {
+    if (!bookingId || verifiedAmount === undefined || verifiedAmount === null) {
+      return { success: false, error: "Booking ID and verified amount are required." };
+    }
+
+    const now = new Date().toISOString();
+    const { data: record, error: fetchErr } = await supabaseServer
+      .from("booking_requests")
+      .select("*")
+      .eq("id", bookingId)
+      .single();
+
+    if (fetchErr || !record) {
+      return { success: false, error: "Booking record not found." };
+    }
+
+    const totalCost = Number(record.package_cost || record.booking_amount || 0);
+    const balanceDue = Math.max(0, totalCost - Number(verifiedAmount));
+    const newPaymentStatus = balanceDue === 0 && totalCost > 0 ? "Paid" : verifiedAmount > 0 ? "Partially Paid" : "Unpaid";
+
+    const { error: updateErr } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        payment_verification_status: "Verified",
+        admin_verified_amount: Number(verifiedAmount),
+        balance_amount: balanceDue,
+        payment_status: newPaymentStatus,
+        payment_verified_at: now,
+        payment_verified_by: "Admin",
+        admin_payment_notes: adminNotes || record.admin_payment_notes || null,
+        updated_at: now
+      })
+      .eq("id", bookingId);
+
+    if (updateErr) {
+      console.error("Error verifying payment:", updateErr);
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, verifiedAmount, balanceDue };
+  } catch (err: any) {
+    console.error("verifyBookingPayment exception:", err);
+    return { success: false, error: err.message || "Unexpected error verifying payment." };
+  }
+}
+
+export async function rejectBookingPayment(
+  bookingId: number,
+  adminNotes?: string
+) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    return { success: false, error: "Unauthorized access" };
+  }
+
+  try {
+    if (!bookingId) {
+      return { success: false, error: "Booking ID is required." };
+    }
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        payment_verification_status: "Mismatch / Rejected",
+        admin_payment_notes: adminNotes || "Payment screenshot or transaction details did not match.",
+        updated_at: now
+      })
+      .eq("id", bookingId);
+
+    if (updateErr) {
+      console.error("Error rejecting payment:", updateErr);
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("rejectBookingPayment exception:", err);
+    return { success: false, error: err.message || "Unexpected error rejecting payment." };
+  }
+}
+
+export async function confirmBookingAndGenerateInvoice(bookingId: number) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("admin_session");
+  if (!session || session.value !== "authenticated") {
+    return { success: false, error: "Unauthorized access" };
+  }
+
+  try {
+    if (!bookingId) {
+      return { success: false, error: "Booking ID is required." };
+    }
+
+    // 1. Fetch current booking record
+    const { data: record, error: fetchErr } = await supabaseServer
+      .from("booking_requests")
+      .select("*")
+      .eq("id", bookingId)
+      .single();
+
+    if (fetchErr || !record) {
+      return { success: false, error: "Booking record not found." };
+    }
+
+    // 2. MANDATORY SECURITY GUARD: Payment Verification MUST be Verified
+    if (record.payment_verification_status !== "Verified") {
+      return {
+        success: false,
+        error: "BLOCKED: Payment verification is required before confirming a booking."
+      };
+    }
+
+    const now = new Date().toISOString();
+    const totalCost = Number(record.package_cost || record.booking_amount || 0);
+    const verifiedPaid = Number(record.admin_verified_amount || 0);
+    const balanceDue = Math.max(0, totalCost - verifiedPaid);
+    const calculatedPaymentStatus = balanceDue === 0 && totalCost > 0 ? "Paid" : "Partially Paid";
+
+    // 3. Ensure guaranteed unique Invoice Number
+    let invoiceNum = record.invoice_number;
+    if (!invoiceNum || invoiceNum.trim() === "") {
+      const { data: maxRows } = await supabaseServer
+        .from("booking_requests")
+        .select("invoice_number, booking_reference, id")
+        .order("id", { ascending: false })
+        .limit(20);
+
+      let maxSeq = 0;
+      maxRows?.forEach((r: any) => {
+        if (r.invoice_number) {
+          const match = r.invoice_number.match(/KY-INV-\d+-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxSeq) maxSeq = num;
+          }
+        }
+        if (r.id > maxSeq) maxSeq = r.id;
+      });
+
+      const nextSeqStr = (maxSeq + 1).toString().padStart(6, "0");
+      invoiceNum = `KY-INV-${new Date().getFullYear()}-${nextSeqStr}`;
+    }
+
+    // 4. Fetch Fares matrix snapshot from package_fares if available
+    let faresMatrix = undefined;
+    if (record.package_name) {
+      const { data: fareData } = await supabaseServer
+        .from("package_fares")
+        .select("*")
+        .eq("package_name", record.package_name)
+        .maybeSingle();
+
+      if (fareData) {
+        faresMatrix = {
+          slFare: fareData.sl_fare || 0,
+          ac3Fare: (fareData.sl_fare || 0) + (fareData.ac3_extra_charge || 0),
+          ac2Fare: (fareData.sl_fare || 0) + (fareData.ac2_extra_charge || 0),
+          flightFare: fareData.flight_fare || 0,
+        };
+      }
+    }
+
+    const travellersCount = Number(record.number_of_travellers || 1);
+    const computedRate = record.rate_per_person || (travellersCount > 0 ? Math.round(totalCost / travellersCount) : totalCost);
+
+    // 5. IMMUTABLE SNAPSHOT LOCKING OBJECT
+    const snapshotData = {
+      invoiceNumber: invoiceNum,
+      bookingReference: record.booking_reference,
+      bookingDate: new Date(record.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
+      invoiceIssuedAt: now,
+      customerName: record.customer_name,
+      phone: record.phone,
+      email: record.email,
+      packageName: record.package_name,
+      travelDate: new Date(record.travel_date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
+      travellers: travellersCount,
+      travelClass: record.travel_class || "Sleeper (SL)",
+      ratePerPerson: computedRate,
+      totalPackageCost: totalCost,
+      amountPaid: verifiedPaid,
+      balanceDue: balanceDue,
+      paymentMethod: record.payment_method || "UPI / Bank Transfer",
+      transactionId: record.transaction_id || "Verified",
+      bookingVerificationStatus: "Confirmed",
+      paymentVerificationStatus: "Verified",
+      paymentStatus: calculatedPaymentStatus,
+      faresMatrix,
+      services: {
+        hotel: record.hotel_category || (record.travel_class === "2AC" ? "Premium" : record.travel_class === "3AC" ? "Deluxe" : record.travel_class === "Flight" ? "Luxury" : "Standard"),
+        meals: record.meal_category || (record.travel_class === "2AC" || record.travel_class === "Flight" ? "Premium" : record.travel_class === "3AC" ? "Standard" : "Basic"),
+        transport: record.transport_category || (record.travel_class === "2AC" || record.travel_class === "Flight" ? "AC Deluxe Vehicle" : record.travel_class === "3AC" ? "AC Vehicle" : "Shared Vehicle"),
+        support: record.travel_class === "2AC" || record.travel_class === "Flight" ? "Priority VIP" : record.travel_class === "3AC" ? "Priority" : "Normal"
+      }
+    };
+
+    // 6. Save locked state to database
+    const { error: updateErr } = await supabaseServer
+      .from("booking_requests")
+      .update({
+        booking_verification_status: "Confirmed",
+        booking_status: "Confirmed",
+        payment_status: calculatedPaymentStatus,
+        balance_amount: balanceDue,
+        invoice_number: invoiceNum,
+        invoice_issued_at: now,
+        booking_confirmed_at: now,
+        booking_confirmed_by: "Admin",
+        final_invoice_generated_at: now,
+        invoice_snapshot: snapshotData,
+        updated_at: now
+      })
+      .eq("id", bookingId);
+
+    if (updateErr) {
+      console.error("Error confirming booking:", updateErr);
+      return { success: false, error: updateErr.message };
+    }
+
+    // 7. Trigger confirmation email to customer
+    if (record.email) {
+      await sendFinalInvoiceConfirmedEmail({
+        ...record,
+        invoice_number: invoiceNum,
+        admin_verified_amount: verifiedPaid,
+        balance_amount: balanceDue,
+        payment_status: calculatedPaymentStatus
+      }).catch(e => console.error("Error sending final confirmation email:", e));
+    }
+
+    return { 
+      success: true, 
+      invoiceNumber: invoiceNum,
+      snapshot: snapshotData
+    };
+  } catch (err: any) {
+    console.error("confirmBookingAndGenerateInvoice exception:", err);
+    return { success: false, error: err.message || "Unexpected error confirming booking." };
+  }
+}
+
+// Helper: send SMTP final confirmed invoice email to customer
+async function sendFinalInvoiceConfirmedEmail(record: any) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || "kamakhyayatra19@gmail.com",
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    const verifiedPaidFormatted = Number(record.admin_verified_amount || 0).toLocaleString("en-IN");
+    const balanceDueFormatted = Number(record.balance_amount || 0).toLocaleString("en-IN");
+
+    const mailOptions = {
+      from: `"Kamakhya Yatra" <${process.env.SMTP_USER || "kamakhyayatra19@gmail.com"}>`,
+      to: record.email,
+      subject: `Booking Confirmed – Kamakhya Yatra | ${record.booking_reference}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 10px;">
+          <h2 style="color: #0b1c3e; text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 10px;">Booking Confirmed!</h2>
+          <p>Dear <strong>${record.customer_name}</strong>,</p>
+          <p>Your booking and payment have been successfully verified by Kamakhya Yatra.</p>
+          
+          <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Booking Reference:</td>
+                <td style="padding: 6px 0; color: #d4af37; font-weight: bold;">${record.booking_reference}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Invoice Number:</td>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">${record.invoice_number}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Package:</td>
+                <td style="padding: 6px 0;">${record.package_name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Travel Class:</td>
+                <td style="padding: 6px 0;">${record.travel_class || "Standard"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Verified Amount Paid:</td>
+                <td style="padding: 6px 0; color: #059669; font-weight: bold;">₹${verifiedPaidFormatted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-weight: bold; color: #0b1c3e;">Balance Due:</td>
+                <td style="padding: 6px 0; color: #e11d48; font-weight: bold;">₹${balanceDueFormatted}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 12px; margin: 20px 0; border-radius: 4px;">
+            <strong style="color: #065f46;">Booking Status:</strong> <span style="font-weight: bold; color: #047857;">CONFIRMED</span>
+          </div>
+
+          <p>Your official Final Booking Invoice is now available. Please download and retain it for your journey.</p>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #777;">
+            <p>Regards,<br/><strong>Kamakhya Yatra</strong></p>
+            <p><a href="https://www.kamakhyayatra.com" style="color: #d4af37; text-decoration: none; font-weight: bold;">www.kamakhyayatra.com</a> | Helpline: +91 70790 44000</p>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+  } catch (err: any) {
+    console.error("sendFinalInvoiceConfirmedEmail error:", err);
   }
 }
 
