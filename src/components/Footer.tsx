@@ -210,19 +210,19 @@ export default function Footer() {
 
           {/* Management Profiles */}
           <div className="mt-2 flex flex-col gap-2">
-            {/* Mr. Jaishankar Dubey */}
+            {/* Mr. Jay Shankar Dubey (Ankit Dubey) */}
             <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3.5 transition-colors hover:bg-white/10">
               <div className="w-[60px] h-[60px] relative shrink-0 rounded-full overflow-hidden border border-[#d4af37]/30">
                 <Image 
                   src="/Ankit Dubey.png" 
-                  alt="Mr. Jaishankar Dubey - Director at Kamakhya Yatra" 
+                  alt="Mr. Jay Shankar Dubey (Ankit Dubey) - Director at Kamakhya Yatra" 
                   fill 
                   className="object-cover object-top" 
                   sizes="60px"
                 />
               </div>
               <div className="flex flex-col">
-                <span className="text-white font-bold text-[15px] tracking-wide leading-tight">Mr. Jaishankar Dubey</span>
+                <span className="text-white font-bold text-[15px] tracking-wide leading-tight">Mr. Jay Shankar Dubey (Ankit Dubey)</span>
                 <span className="text-[#d4af37] text-[11px] font-bold uppercase tracking-wider mt-0.5">Director</span>
                 <span className="text-slate-400 text-[10px] font-medium tracking-widest mt-0.5">Kamakhya Yatra</span>
               </div>
