@@ -1450,7 +1450,8 @@ export async function submitBookingRequest(data: {
       ? Math.round(data.packageCost / data.numberOfTravellers)
       : 0;
 
-    // 2. Insert record
+    // 2. Insert record into Supabase booking_requests table
+    console.log(`[submitBookingRequest] Step 1/5: Attempting database INSERT for customer ${data.customerName} (${cleanPhone})...`);
     let record: any = null;
     let error: any = null;
 
@@ -1489,9 +1490,12 @@ export async function submitBookingRequest(data: {
       .select("*")
       .single();
 
+    record = insertResult.data;
+    error = insertResult.error;
+
     // Fallback if new verification columns are not present in Supabase DB yet
     if (error && (error.message?.includes("Could not find the") || error.code === "PGRST204")) {
-      console.warn("Verification columns not found in database schema yet. Using legacy insert fallback...");
+      console.warn("[submitBookingRequest] Verification columns not found in database schema yet. Using legacy insert fallback...", error.message);
       const legacyPayload = {
         customer_name: data.customerName,
         phone: cleanPhone,
@@ -1531,7 +1535,7 @@ export async function submitBookingRequest(data: {
 
     // Retry once with dynamic sequence fallback if unique constraint error occurs
     if (error && error.message?.includes("booking_requests_invoice_number_key")) {
-      console.warn("Unique constraint collision on invoice_number. Attempting atomic sequence fallback...");
+      console.warn("[submitBookingRequest] Unique constraint collision on invoice_number. Attempting atomic sequence fallback...", error.message);
       
       const { data: maxRows } = await supabaseServer
         .from("booking_requests")
@@ -1602,38 +1606,46 @@ export async function submitBookingRequest(data: {
     }
 
     if (error || !record) {
-      console.error("Database insert error:", error);
+      console.error("[submitBookingRequest] Database insert failed:", error);
       return { success: false, error: "We could not complete your booking right now. Please try again or contact support." };
     }
 
-    // Create admin notification in database
+    const bookingRef = record.booking_reference || `KY-BKG-${new Date().getFullYear()}-${String(record.id).padStart(6, "0")}`;
+    const invoiceNum = record.invoice_number || `KY-INV-${bookingRef.replace("KY-BKG-", "")}`;
+
+    console.log(`[submitBookingRequest] Step 2/5: Successfully created booking record in Supabase: ID=${record.id}, Reference=${bookingRef}, Invoice=${invoiceNum}`);
+
+    // Create admin notification in database (non-blocking)
+    console.log(`[submitBookingRequest] Step 3/5: Creating in-app admin notification...`);
     await createAdminNotification(
       "new_booking",
-      `New Booking: ${record.booking_reference}`,
+      `New Booking: ${bookingRef}`,
       `New booking request submitted by ${record.customer_name} for ${record.package_name}.`,
       "bookings",
-      record.booking_reference
-    ).catch(err => console.error("Failed to create admin booking notification:", err));
+      bookingRef
+    ).catch(err => console.error("[submitBookingRequest] Admin notification warning (non-fatal):", err));
 
-    // Send admin notification email via SMTP
-    await sendAdminBookingReceiptEmail(record).catch(err => {
-      console.error("Failed to send admin booking alert email:", err);
+    // Send admin notification email via SMTP (non-blocking)
+    console.log(`[submitBookingRequest] Step 4/5: Dispatching admin notification email...`);
+    await sendAdminBookingReceiptEmail({ ...record, booking_reference: bookingRef, invoice_number: invoiceNum }).catch(err => {
+      console.error("[submitBookingRequest] Admin email notification warning (non-fatal):", err);
     });
 
-    // 3. Send receipt email via SMTP
-    await sendBookingReceiptEmail(record).catch(err => {
-      console.error("Failed to send booking receipt email:", err);
+    // 3. Send customer receipt email via SMTP (non-blocking)
+    console.log(`[submitBookingRequest] Step 5/5: Dispatching customer provisional acknowledgement email...`);
+    await sendBookingReceiptEmail({ ...record, booking_reference: bookingRef, invoice_number: invoiceNum }).catch(err => {
+      console.error("[submitBookingRequest] Customer receipt email warning (non-fatal):", err);
     });
 
     return { 
       success: true, 
       id: record.id, 
-      booking_reference: record.booking_reference,
-      invoice_number: record.invoice_number || `KY-INV-${record.booking_reference.replace("KY-BKG-", "")}`,
+      booking_reference: bookingRef,
+      invoice_number: invoiceNum,
       advance_amount: record.advance_amount
     };
   } catch (err: any) {
-    console.error("Booking request submission error:", err);
+    console.error("[submitBookingRequest] Unhandled error during submission:", err);
     return { success: false, error: "We could not complete your booking right now. Please try again or contact support." };
   }
 }
