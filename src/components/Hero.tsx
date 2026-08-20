@@ -331,11 +331,19 @@ export default function Hero({ packages }: { packages?: any[] }) {
           </a>
 
           {/* desktop nav */}
-          <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold tracking-wide">
+          <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm font-semibold tracking-wide">
             {["Home","Tours","Destinations","About Us","Gallery","Blog","Contact Us"].map((l) => (
               <a key={l} href={l === "Home" ? "/" : `/${l.toLowerCase().replace(" ", "-")}`}
                  className="hover:text-[#d4af37] transition-colors duration-200">{l}</a>
             ))}
+            <a 
+              href="https://itineraryall.vercel.app/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-[#d4af37] transition-colors duration-200"
+            >
+              Make Tour Itinerary
+            </a>
           </nav>
 
           {/* CTA + mobile toggle */}
@@ -365,6 +373,15 @@ export default function Hero({ packages }: { packages?: any[] }) {
                      className="py-2 border-b border-white/5 text-sm font-semibold hover:text-[#d4af37] transition"
                      onClick={() => setMenuOpen(false)}>{l}</a>
                 ))}
+                <a 
+                  href="https://itineraryall.vercel.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="py-2 border-b border-white/5 text-sm font-semibold hover:text-[#d4af37] transition"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Make Tour Itinerary
+                </a>
               </div>
             </motion.div>
           )}

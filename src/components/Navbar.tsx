@@ -24,7 +24,7 @@ export default function Navbar() {
         </div>
 
         {/* Nav Menu Desktop */}
-        <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold tracking-wide text-slate-600">
+        <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm font-semibold tracking-wide text-slate-600">
           {["Home", "Tours", "Destinations", "About Us", "Gallery", "Blog", "Contact Us"].map((link) => (
             <a 
               key={link} 
@@ -34,6 +34,14 @@ export default function Navbar() {
               {link}
             </a>
           ))}
+          <a 
+            href="https://itineraryall.vercel.app/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="hover:text-[#0b1c3e] transition duration-200"
+          >
+            Make Tour Itinerary
+          </a>
         </nav>
 
         {/* Right Header Actions */}
@@ -69,6 +77,15 @@ export default function Navbar() {
                 {link}
               </a>
             ))}
+            <a 
+              href="https://itineraryall.vercel.app/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="py-2 border-b border-slate-50 font-semibold text-sm hover:text-[#0b1c3e] text-slate-700 transition"
+              onClick={() => setMenuOpen(false)}
+            >
+              Make Tour Itinerary
+            </a>
             <a 
               href="tel:+917079044000" 
               className="mt-2 flex items-center justify-center gap-2 border border-[#0b1c3e] bg-[#0b1c3e] text-white font-bold py-3 rounded-full text-sm"
