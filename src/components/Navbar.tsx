@@ -64,43 +64,43 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Nav Menu Desktop (Visible on xl / 1200px+ screens to ensure flawless, uncrowded spacing) */}
-        <nav className="hidden xl:flex items-center gap-5 2xl:gap-6 text-[13px] 2xl:text-sm font-semibold tracking-wide text-slate-600">
+        {/* Nav Menu Desktop (Visible on xl / 1280px+ screens: perfectly aligned on 1 line with zero wrapping) */}
+        <nav className="hidden xl:flex items-center gap-4 2xl:gap-6 text-[13px] 2xl:text-sm font-semibold tracking-wide text-slate-600 flex-nowrap shrink-0">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
               <a 
                 key={link.name} 
                 href={link.href} 
-                className={`transition-colors duration-200 relative py-1 hover:text-[#0b1c3e] ${
+                className={`inline-flex items-center justify-center h-8 px-2 whitespace-nowrap transition-colors duration-200 relative hover:text-[#0b1c3e] leading-none ${
                   isActive ? "text-[#0b1c3e] font-bold" : "text-slate-600"
                 }`}
               >
-                {link.name}
+                <span>{link.name}</span>
                 {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#d4af37] rounded-full" />
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#d4af37] rounded-full" />
                 )}
               </a>
             );
           })}
 
-          {/* Action Button 1: Make Tour Itinerary (Subtle Gold Accent CTA) */}
+          {/* Action Button 1: Make Tour Itinerary (Subtle Gold Accent CTA with unified h-8 height) */}
           <a 
             href="https://itineraryall.vercel.app/" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] text-[#0b1c3e] bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-white transition-all duration-200 shadow-2xs hover:shadow-xs shrink-0"
+            className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] text-[#0b1c3e] bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-white transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
           >
             <Sparkles className="w-3.5 h-3.5 text-[#d4af37] group-hover:text-white transition-colors" />
             <span>Make Tour Itinerary</span>
           </a>
 
-          {/* Action Button 2: Book Tickets (Stronger External Booking CTA) */}
+          {/* Action Button 2: Book Tickets (Stronger External Booking CTA with unified h-8 height) */}
           <a 
             href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide bg-[#0b1c3e] text-[#d4af37] hover:bg-[#162d59] hover:text-white border border-[#d4af37]/40 transition-all duration-200 shadow-2xs hover:shadow-xs shrink-0"
+            className="inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-bold tracking-wide bg-[#0b1c3e] text-[#d4af37] hover:bg-[#162d59] hover:text-white border border-[#d4af37]/40 transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
           >
             <Ticket className="w-3.5 h-3.5 text-[#d4af37]" />
             <span>Book Tickets</span>
@@ -108,11 +108,11 @@ export default function Navbar() {
         </nav>
 
         {/* Right Header Actions */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 xl:ml-[36px] shrink-0">
           {/* Phone button (Untouched styling & number as strictly required) */}
           <a 
             href="tel:+917079044000" 
-            className="hidden sm:flex items-center gap-2 border border-[#0b1c3e]/30 hover:border-[#0b1c3e] bg-slate-50 hover:bg-[#0b1c3e]/5 text-[#0b1c3e] font-bold py-2.5 px-6 rounded-full text-xs tracking-wider transition-all duration-300"
+            className="hidden sm:flex items-center gap-2 border border-[#0b1c3e]/30 hover:border-[#0b1c3e] bg-slate-50 hover:bg-[#0b1c3e]/5 text-[#0b1c3e] font-bold py-2.5 px-6 rounded-full text-xs tracking-wider transition-all duration-300 whitespace-nowrap shrink-0"
           >
             <span>📞 +91 70790 44000</span>
           </a>

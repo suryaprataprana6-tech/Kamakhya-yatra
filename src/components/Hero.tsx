@@ -331,29 +331,37 @@ export default function Hero({ packages }: { packages?: any[] }) {
           </a>
 
           {/* desktop nav */}
-          <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm font-semibold tracking-wide">
+          <nav className="hidden xl:flex items-center gap-4 2xl:gap-6 text-[13px] 2xl:text-sm font-semibold tracking-wide flex-nowrap shrink-0">
             {["Home","Tours","Destinations","About Us","Gallery","Blog","Contact Us"].map((l) => (
               <a key={l} href={l === "Home" ? "/" : `/${l.toLowerCase().replace(" ", "-")}`}
-                 className="hover:text-[#d4af37] transition-colors duration-200">{l}</a>
+                 className="inline-flex items-center justify-center h-8 px-2 whitespace-nowrap hover:text-[#d4af37] transition-colors duration-200 leading-none">{l}</a>
             ))}
             <a 
               href="https://itineraryall.vercel.app/" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="hover:text-[#d4af37] transition-colors duration-200"
+              className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] text-white bg-[#d4af37]/15 hover:bg-[#d4af37] hover:text-[#0b1c3e] transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
             >
               Make Tour Itinerary
+            </a>
+            <a 
+              href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-bold tracking-wide bg-gradient-to-r from-[#d4af37] to-[#e6c65b] text-[#0b1c3e] hover:brightness-110 border border-[#d4af37]/40 transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
+            >
+              Book Tickets
             </a>
           </nav>
 
           {/* CTA + mobile toggle */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 xl:ml-[36px] shrink-0">
             <a href="tel:+917079044000"
-               className="hidden sm:flex items-center gap-2 rounded-full border border-[#d4af37]/40 bg-white/5 px-5 py-2.5 text-xs font-bold tracking-wider hover:bg-[#d4af37]/10 hover:border-[#d4af37] transition-all duration-300">
+               className="hidden sm:flex items-center gap-2 rounded-full border border-[#d4af37]/40 bg-white/5 px-5 py-2.5 text-xs font-bold tracking-wider hover:bg-[#d4af37]/10 hover:border-[#d4af37] transition-all duration-300 whitespace-nowrap shrink-0">
               <Phone className="w-3.5 h-3.5 text-[#d4af37]" />
               <span>+91 70790 44000</span>
             </a>
-            <button className="lg:hidden p-2 hover:text-[#d4af37]" onClick={() => setMenuOpen(!menuOpen)}>
+            <button className="xl:hidden p-2 hover:text-[#d4af37]" onClick={() => setMenuOpen(!menuOpen)}>
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                       d={menuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
@@ -366,7 +374,7 @@ export default function Hero({ packages }: { packages?: any[] }) {
         <AnimatePresence>
           {menuOpen && (
             <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                        className="lg:hidden bg-[#07142e]/95 backdrop-blur-lg border-b border-white/10 shadow-2xl">
+                        className="xl:hidden bg-[#07142e]/95 backdrop-blur-lg border-b border-white/10 shadow-2xl">
               <div className="px-6 py-4 flex flex-col gap-3">
                 {["Home","Tours","Destinations","About Us","Gallery","Blog","Contact Us"].map((l) => (
                   <a key={l} href={l === "Home" ? "/" : `/${l.toLowerCase().replace(" ","-")}`}
@@ -381,6 +389,15 @@ export default function Hero({ packages }: { packages?: any[] }) {
                   onClick={() => setMenuOpen(false)}
                 >
                   Make Tour Itinerary
+                </a>
+                <a 
+                  href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="py-2 border-b border-white/5 text-sm font-semibold hover:text-[#d4af37] transition"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Book Tickets
                 </a>
               </div>
             </motion.div>
