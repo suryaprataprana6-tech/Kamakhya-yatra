@@ -54,12 +54,12 @@ export default function Navbar() {
           <div className="relative w-10 h-10 overflow-hidden rounded-full border border-[#d4af37]/60 bg-[#0b1c3e] shadow-xs shrink-0">
             <Image src="/logo.png" alt="Kamakhya Yatra logo" fill className="object-cover" priority />
           </div>
-          <div className="flex flex-col">
-            <h2 className="font-heading text-lg font-extrabold tracking-wide uppercase text-[#0b1c3e] leading-tight">
+          <div className="flex flex-col justify-center">
+            <h2 className="font-heading text-[17px] font-extrabold tracking-wider uppercase text-[#0b1c3e] leading-none">
               Kamakhya Yatra
             </h2>
-            <p className="text-[10px] text-[#d4af37] font-bold tracking-widest -mt-0.5">
-              PREMIUM TOUR & TRAVEL
+            <p className="text-[9.5px] font-bold tracking-[0.18em] uppercase text-[#d4af37] leading-none mt-1">
+              PREMIUM TOUR &amp; TRAVEL
             </p>
           </div>
         </div>
@@ -143,16 +143,16 @@ export default function Navbar() {
             {/* Drawer Header */}
             <div>
               <div className="p-5 flex items-center justify-between border-b border-white/10">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => { router.push("/"); setMenuOpen(false); }}>
+                <div className="flex items-center gap-3 cursor-pointer select-none" onClick={() => { router.push("/"); setMenuOpen(false); }}>
                   <div className="relative w-9 h-9 overflow-hidden rounded-full border border-[#d4af37]/60 bg-[#0b1c3e] shrink-0">
                     <Image src="/logo.png" alt="Kamakhya Yatra logo" fill className="object-cover" />
                   </div>
-                  <div>
-                    <h3 className="font-heading text-base font-extrabold tracking-wide uppercase text-white leading-tight">
+                  <div className="flex flex-col justify-center">
+                    <h3 className="font-heading text-[15px] font-extrabold tracking-wider uppercase text-white leading-none">
                       Kamakhya Yatra
                     </h3>
-                    <p className="text-[9px] text-[#d4af37] font-bold tracking-widest">
-                      PREMIUM TOUR & TRAVEL
+                    <p className="text-[9px] font-bold tracking-[0.16em] uppercase text-[#d4af37] leading-none mt-1">
+                      PREMIUM TOUR &amp; TRAVEL
                     </p>
                   </div>
                 </div>

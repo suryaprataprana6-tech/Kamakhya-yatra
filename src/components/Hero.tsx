@@ -316,15 +316,15 @@ export default function Hero({ packages }: { packages?: any[] }) {
       <header className="relative z-20 w-full border-b border-white/10 bg-white/5 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           {/* logo */}
-          <a href="/" className="flex items-center gap-3">
-            <span className="relative w-10 h-10 overflow-hidden rounded-full border border-[#d4af37]/50 bg-[#0b1c3e]">
-              <Image src="/logo.png" alt="Kamakhya Yatra" fill sizes="40px" className="object-cover" />
+          <a href="/" className="flex items-center gap-3 select-none shrink-0">
+            <span className="relative w-10 h-10 overflow-hidden rounded-full border border-[#d4af37]/60 bg-[#0b1c3e] shadow-xs shrink-0">
+              <Image src="/logo.png" alt="Kamakhya Yatra logo" fill sizes="40px" className="object-cover" priority />
             </span>
-            <span>
-              <span className="block text-lg font-extrabold tracking-wide uppercase leading-none">
+            <span className="flex flex-col justify-center">
+              <span className="font-heading text-[17px] font-extrabold tracking-wider uppercase text-white leading-none">
                 Kamakhya Yatra
               </span>
-              <span className="block text-[10px] text-[#d4af37] font-semibold tracking-widest">
+              <span className="text-[9.5px] font-bold tracking-[0.18em] uppercase text-[#d4af37] leading-none mt-1">
                 PREMIUM TOUR &amp; TRAVEL
               </span>
             </span>
