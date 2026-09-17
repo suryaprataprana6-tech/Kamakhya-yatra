@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Menu, X, ExternalLink, Sparkles, Ticket } from "lucide-react";
+import { Menu, X, ExternalLink, ChevronDown } from "lucide-react";
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<"suite" | "tickets" | null>(null);
+  const navContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -22,15 +24,27 @@ export default function Navbar() {
     };
   }, [menuOpen]);
 
-  // Close mobile drawer on Escape key
+  // Close dropdown on click outside & Escape key
   useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (navContainerRef.current && !navContainerRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        setOpenDropdown(null);
         setMenuOpen(false);
       }
     };
+
+    document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const navLinks = [
@@ -45,7 +59,10 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-slate-100/80 bg-white/95 backdrop-blur-md text-slate-800 shadow-sm transition-all duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center gap-4">
+      <div 
+        ref={navContainerRef}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center gap-4"
+      >
         {/* Logo brand */}
         <div 
           className="flex items-center gap-3 cursor-pointer select-none shrink-0" 
@@ -84,27 +101,137 @@ export default function Navbar() {
             );
           })}
 
-          {/* Action Button 1: Make Tour Itinerary (Subtle Gold Accent CTA with unified h-8 height) */}
-          <a 
-            href="https://itineraryall.vercel.app/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] text-[#0b1c3e] bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-white transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
+          {/* Action Dropdown 1: Travel Suite */}
+          <div 
+            className="relative"
+            onMouseEnter={() => setOpenDropdown("suite")}
+            onMouseLeave={() => setOpenDropdown(null)}
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#d4af37] group-hover:text-white transition-colors" />
-            <span>Make Tour Itinerary</span>
-          </a>
+            <button 
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === "suite" ? null : "suite")}
+              aria-expanded={openDropdown === "suite"}
+              aria-haspopup="true"
+              className={`inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none cursor-pointer ${
+                openDropdown === "suite"
+                  ? "bg-[#d4af37] text-white"
+                  : "text-[#0b1c3e] bg-[#d4af37]/10 hover:bg-[#d4af37] hover:text-white"
+              }`}
+            >
+              <span>Travel Suite</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdown === "suite" ? "rotate-180" : ""}`} />
+            </button>
 
-          {/* Action Button 2: Book Tickets (Stronger External Booking CTA with unified h-8 height) */}
-          <a 
-            href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-bold tracking-wide bg-[#0b1c3e] text-[#d4af37] hover:bg-[#162d59] hover:text-white border border-[#d4af37]/40 transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none"
+            {openDropdown === "suite" && (
+              <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex flex-col gap-1">
+                  <a
+                    href="https://itineraryall.vercel.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpenDropdown(null)}
+                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                  >
+                    <span className="text-xl shrink-0 mt-0.5 select-none">🗺️</span>
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                        Itinerary Maker
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                        Create &amp; Customize Tour Itinerary
+                      </span>
+                    </div>
+                  </a>
+
+                  <div className="h-[1px] bg-white/10 mx-2" />
+
+                  <a
+                    href="https://crm-structure-kaakhya-git-main-surya-pratap-ranas-projects.vercel.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpenDropdown(null)}
+                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                  >
+                    <span className="text-xl shrink-0 mt-0.5 select-none">📊</span>
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                        CRM
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                        Manage Leads &amp; Customers
+                      </span>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Dropdown 2: Book Tickets */}
+          <div 
+            className="relative"
+            onMouseEnter={() => setOpenDropdown("tickets")}
+            onMouseLeave={() => setOpenDropdown(null)}
           >
-            <Ticket className="w-3.5 h-3.5 text-[#d4af37]" />
-            <span>Book Tickets</span>
-          </a>
+            <button 
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === "tickets" ? null : "tickets")}
+              aria-expanded={openDropdown === "tickets"}
+              aria-haspopup="true"
+              className={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-bold tracking-wide border border-[#d4af37]/40 transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none cursor-pointer ${
+                openDropdown === "tickets"
+                  ? "bg-[#162d59] text-white border-[#d4af37]"
+                  : "bg-[#0b1c3e] text-[#d4af37] hover:bg-[#162d59] hover:text-white"
+              }`}
+            >
+              <span>Book Tickets</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openDropdown === "tickets" ? "rotate-180" : ""}`} />
+            </button>
+
+            {openDropdown === "tickets" && (
+              <div className="absolute top-full mt-2 right-0 w-64 rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex flex-col gap-1">
+                  <a
+                    href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpenDropdown(null)}
+                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                  >
+                    <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                        VIA
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                        Online Train/Travel Booking
+                      </span>
+                    </div>
+                  </a>
+
+                  <div className="h-[1px] bg-white/10 mx-2" />
+
+                  <a
+                    href="https://www.confirmtkt.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpenDropdown(null)}
+                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                  >
+                    <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                        ConfirmTkt
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                        Train Ticket Booking
+                      </span>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Right Header Actions */}
@@ -190,36 +317,94 @@ export default function Navbar() {
               </div>
 
               {/* Action Buttons Section */}
-              <div className="px-4 pt-2 pb-4 border-t border-white/10 flex flex-col gap-2.5">
-                {/* Make Tour Itinerary CTA (Subtle Gold Accent) */}
-                <a 
-                  href="https://itineraryall.vercel.app/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#d4af37]/15 border border-[#d4af37]/40 text-[#d4af37] hover:bg-[#d4af37]/25 font-semibold text-xs tracking-wide transition shadow-xs"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#d4af37]" />
-                    <span>Make Tour Itinerary</span>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                </a>
+              <div className="px-4 pt-3 pb-4 border-t border-white/10 flex flex-col gap-3">
+                {/* Travel Suite Group */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#d4af37] px-1">
+                    Travel Suite
+                  </span>
+                  <a 
+                    href="https://itineraryall.vercel.app/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg select-none">🗺️</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors">
+                          Itinerary Maker
+                        </span>
+                        <span className="text-[10px] text-slate-300">Create &amp; Customize Tour Itinerary</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
+                  </a>
 
-                {/* Book Tickets CTA (Stronger Highlight CTA) */}
-                <a 
-                  href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#e6c65b] text-[#0b1c3e] font-bold text-xs tracking-wider uppercase shadow-md hover:brightness-105 active:scale-[0.99] transition"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Ticket className="w-4 h-4 text-[#0b1c3e]" />
-                    <span>Book Tickets</span>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-[#0b1c3e]/70" />
-                </a>
+                  <a 
+                    href="https://crm-structure-kaakhya-git-main-surya-pratap-ranas-projects.vercel.app/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg select-none">📊</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors">
+                          CRM
+                        </span>
+                        <span className="text-[10px] text-slate-300">Manage Leads &amp; Customers</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
+                  </a>
+                </div>
+
+                {/* Book Tickets Group */}
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#d4af37] px-1">
+                    Book Tickets
+                  </span>
+                  <a 
+                    href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg select-none">🎫</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors">
+                          VIA
+                        </span>
+                        <span className="text-[10px] text-slate-300">Online Train/Travel Booking</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
+                  </a>
+
+                  <a 
+                    href="https://www.confirmtkt.com/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg select-none">🎫</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors">
+                          ConfirmTkt
+                        </span>
+                        <span className="text-[10px] text-slate-300">Train Ticket Booking</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
+                  </a>
+                </div>
               </div>
             </div>
 
