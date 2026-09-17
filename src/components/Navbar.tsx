@@ -1,16 +1,58 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Menu, X, ExternalLink, ChevronDown } from "lucide-react";
 
+const CRM_URL = "https://crm-structure-kaakhya.vercel.app/";
+const CRM_PASS_PARTS = ["Surya", "@", "6209", "#"];
+const checkCrmPassword = (input: string) => input === CRM_PASS_PARTS.join("");
+
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<"suite" | "tickets" | null>(null);
+  const [showCrmModal, setShowCrmModal] = useState(false);
+  const [crmPassword, setCrmPassword] = useState("");
+  const [crmError, setCrmError] = useState("");
   const navContainerRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
+
+  const handleCrmClick = () => {
+    setOpenDropdown(null);
+    setCrmPassword("");
+    setCrmError("");
+    setShowCrmModal(true);
+  };
+
+  const handleCrmSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (checkCrmPassword(crmPassword)) {
+      window.open(CRM_URL, "_blank", "noopener,noreferrer");
+      setShowCrmModal(false);
+      setCrmPassword("");
+      setCrmError("");
+    } else {
+      setCrmError("Incorrect password. Access denied.");
+    }
+  };
+
+  // Delayed dropdown open/close to prevent dead-zone flicker
+  const handleDropdownEnter = useCallback((id: "suite" | "tickets") => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setOpenDropdown(id);
+  }, []);
+
+  const handleDropdownLeave = useCallback(() => {
+    closeTimerRef.current = setTimeout(() => setOpenDropdown(null), 150);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); };
+  }, []);
 
   // Prevent background scroll when mobile drawer is open
   useEffect(() => {
@@ -36,6 +78,11 @@ export default function Navbar() {
       if (e.key === "Escape") {
         setOpenDropdown(null);
         setMenuOpen(false);
+        if (showCrmModal) {
+          setShowCrmModal(false);
+          setCrmPassword("");
+          setCrmError("");
+        }
       }
     };
 
@@ -45,7 +92,7 @@ export default function Navbar() {
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [showCrmModal]);
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -104,8 +151,8 @@ export default function Navbar() {
           {/* Action Dropdown 1: Travel Suite */}
           <div 
             className="relative"
-            onMouseEnter={() => setOpenDropdown("suite")}
-            onMouseLeave={() => setOpenDropdown(null)}
+            onMouseEnter={() => handleDropdownEnter("suite")}
+            onMouseLeave={handleDropdownLeave}
           >
             <button 
               type="button"
@@ -123,45 +170,45 @@ export default function Navbar() {
             </button>
 
             {openDropdown === "suite" && (
-              <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex flex-col gap-1">
-                  <a
-                    href="https://itineraryall.vercel.app/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenDropdown(null)}
-                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
-                  >
-                    <span className="text-xl shrink-0 mt-0.5 select-none">🗺️</span>
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
-                        Itinerary Maker
-                      </span>
-                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
-                        Create &amp; Customize Tour Itinerary
-                      </span>
-                    </div>
-                  </a>
+              <div className="absolute top-full left-0 w-72 z-50 pt-2" style={{ pointerEvents: "auto" }}>
+                <div className="rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex flex-col gap-1">
+                    <a
+                      href="https://itineraryall.vercel.app/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setOpenDropdown(null)}
+                      className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                    >
+                      <span className="text-xl shrink-0 mt-0.5 select-none">🗺️</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                          Itinerary Maker
+                        </span>
+                        <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                          Create &amp; Customize Tour Itinerary
+                        </span>
+                      </div>
+                    </a>
 
-                  <div className="h-[1px] bg-white/10 mx-2" />
+                    <div className="h-[1px] bg-white/10 mx-2" />
 
-                  <a
-                    href="https://crm-structure-kaakhya-git-main-surya-pratap-ranas-projects.vercel.app/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenDropdown(null)}
-                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
-                  >
-                    <span className="text-xl shrink-0 mt-0.5 select-none">📊</span>
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
-                        CRM
-                      </span>
-                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
-                        Manage Leads &amp; Customers
-                      </span>
-                    </div>
-                  </a>
+                    <button
+                      type="button"
+                      onClick={handleCrmClick}
+                      className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150 w-full text-left cursor-pointer"
+                    >
+                      <span className="text-xl shrink-0 mt-0.5 select-none">📊</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                          CRM
+                        </span>
+                        <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                          Manage Leads &amp; Customers
+                        </span>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -170,8 +217,8 @@ export default function Navbar() {
           {/* Action Dropdown 2: Book Tickets */}
           <div 
             className="relative"
-            onMouseEnter={() => setOpenDropdown("tickets")}
-            onMouseLeave={() => setOpenDropdown(null)}
+            onMouseEnter={() => handleDropdownEnter("tickets")}
+            onMouseLeave={handleDropdownLeave}
           >
             <button 
               type="button"
@@ -189,45 +236,47 @@ export default function Navbar() {
             </button>
 
             {openDropdown === "tickets" && (
-              <div className="absolute top-full mt-2 right-0 w-64 rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex flex-col gap-1">
-                  <a
-                    href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenDropdown(null)}
-                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
-                  >
-                    <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
-                        VIA
-                      </span>
-                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
-                        Online Train/Travel Booking
-                      </span>
-                    </div>
-                  </a>
+              <div className="absolute top-full right-0 w-64 z-50 pt-2" style={{ pointerEvents: "auto" }}>
+                <div className="rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex flex-col gap-1">
+                    <a
+                      href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setOpenDropdown(null)}
+                      className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                    >
+                      <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                          VIA
+                        </span>
+                        <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                          Online Train/Travel Booking
+                        </span>
+                      </div>
+                    </a>
 
-                  <div className="h-[1px] bg-white/10 mx-2" />
+                    <div className="h-[1px] bg-white/10 mx-2" />
 
-                  <a
-                    href="https://www.confirmtkt.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenDropdown(null)}
-                    className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
-                  >
-                    <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
-                        ConfirmTkt
-                      </span>
-                      <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
-                        Train Ticket Booking
-                      </span>
-                    </div>
-                  </a>
+                    <a
+                      href="https://www.confirmtkt.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setOpenDropdown(null)}
+                      className="group flex items-start gap-3 p-2.5 rounded-xl hover:bg-white/10 transition-all duration-150"
+                    >
+                      <span className="text-xl shrink-0 mt-0.5 select-none">🎫</span>
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs font-bold text-white group-hover:text-[#d4af37] transition-colors flex items-center gap-1.5">
+                          ConfirmTkt
+                        </span>
+                        <span className="text-[11px] text-slate-300 font-normal leading-tight mt-0.5">
+                          Train Ticket Booking
+                        </span>
+                      </div>
+                    </a>
+                  </div>
                 </div>
               </div>
             )}
@@ -342,12 +391,10 @@ export default function Navbar() {
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
                   </a>
 
-                  <a 
-                    href="https://crm-structure-kaakhya-git-main-surya-pratap-ranas-projects.vercel.app/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
-                    onClick={() => setMenuOpen(false)}
+                  <button 
+                    type="button"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group w-full text-left cursor-pointer"
+                    onClick={() => { setMenuOpen(false); handleCrmClick(); }}
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="text-lg select-none">📊</span>
@@ -359,7 +406,7 @@ export default function Navbar() {
                       </div>
                     </div>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#d4af37] shrink-0" />
-                  </a>
+                  </button>
                 </div>
 
                 {/* Book Tickets Group */}
@@ -368,7 +415,7 @@ export default function Navbar() {
                     Book Tickets
                   </span>
                   <a 
-                    href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE_ACTION" 
+                    href="https://www.viaworld.in/agent?action1=VIEW_RECHARGE_ACCOUNT_UPI_PAGE" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-[#d4af37]/30 hover:bg-white/10 transition shadow-xs group"
@@ -417,6 +464,54 @@ export default function Navbar() {
                 <span>📞 +91 70790 44000</span>
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* CRM Password Modal */}
+      {showCrmModal && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowCrmModal(false)}
+        >
+          <div 
+            className="relative w-[90%] max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Close modal"
+              className="absolute top-3 right-3 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              onClick={() => setShowCrmModal(false)}
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex flex-col items-center gap-1 mb-5">
+              <span className="text-3xl select-none">🔒</span>
+              <h3 className="text-lg font-extrabold text-[#0b1c3e]">CRM Access</h3>
+              <p className="text-xs text-slate-500">Enter the password to access CRM</p>
+            </div>
+
+            <form onSubmit={handleCrmSubmit} className="flex flex-col gap-3">
+              <input
+                type="password"
+                autoFocus
+                placeholder="Enter password"
+                value={crmPassword}
+                onChange={(e) => { setCrmPassword(e.target.value); setCrmError(""); }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-[#0b1c3e] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#d4af37]/50 focus:border-[#d4af37] transition"
+              />
+              {crmError && (
+                <p className="text-xs font-semibold text-red-500 text-center">{crmError}</p>
+              )}
+              <button
+                type="submit"
+                className="w-full rounded-xl bg-[#0b1c3e] py-3 text-sm font-bold text-white hover:bg-[#162d59] transition-all duration-200 shadow-md cursor-pointer"
+              >
+                Unlock CRM
+              </button>
+            </form>
           </div>
         </div>
       )}
