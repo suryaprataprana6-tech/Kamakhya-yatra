@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Menu, X, ExternalLink, ChevronDown } from "lucide-react";
@@ -16,7 +16,6 @@ export default function Navbar() {
   const [crmPassword, setCrmPassword] = useState("");
   const [crmError, setCrmError] = useState("");
   const navContainerRef = useRef<HTMLDivElement>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -39,20 +38,10 @@ export default function Navbar() {
     }
   };
 
-  // Delayed dropdown open/close to prevent dead-zone flicker
-  const handleDropdownEnter = useCallback((id: "suite" | "tickets") => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    setOpenDropdown(id);
-  }, []);
-
-  const handleDropdownLeave = useCallback(() => {
-    closeTimerRef.current = setTimeout(() => setOpenDropdown(null), 150);
-  }, []);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); };
-  }, []);
+  // Toggle dropdown: click to open/close, clicking the other dropdown switches
+  const toggleDropdown = (id: "suite" | "tickets") => {
+    setOpenDropdown((prev) => (prev === id ? null : id));
+  };
 
   // Prevent background scroll when mobile drawer is open
   useEffect(() => {
@@ -151,12 +140,10 @@ export default function Navbar() {
           {/* Action Dropdown 1: Travel Suite */}
           <div 
             className="relative"
-            onMouseEnter={() => handleDropdownEnter("suite")}
-            onMouseLeave={handleDropdownLeave}
           >
             <button 
               type="button"
-              onClick={() => setOpenDropdown(openDropdown === "suite" ? null : "suite")}
+              onClick={() => toggleDropdown("suite")}
               aria-expanded={openDropdown === "suite"}
               aria-haspopup="true"
               className={`inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold tracking-wide border border-[#d4af37] transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none cursor-pointer ${
@@ -170,7 +157,7 @@ export default function Navbar() {
             </button>
 
             {openDropdown === "suite" && (
-              <div className="absolute top-full left-0 w-72 z-50 pt-2" style={{ pointerEvents: "auto" }}>
+              <div className="absolute top-full left-0 w-72 z-50 mt-1">
                 <div className="rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex flex-col gap-1">
                     <a
@@ -217,12 +204,10 @@ export default function Navbar() {
           {/* Action Dropdown 2: Book Tickets */}
           <div 
             className="relative"
-            onMouseEnter={() => handleDropdownEnter("tickets")}
-            onMouseLeave={handleDropdownLeave}
           >
             <button 
               type="button"
-              onClick={() => setOpenDropdown(openDropdown === "tickets" ? null : "tickets")}
+              onClick={() => toggleDropdown("tickets")}
               aria-expanded={openDropdown === "tickets"}
               aria-haspopup="true"
               className={`inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-bold tracking-wide border border-[#d4af37]/40 transition-all duration-200 whitespace-nowrap shadow-2xs hover:shadow-xs shrink-0 leading-none cursor-pointer ${
@@ -236,7 +221,7 @@ export default function Navbar() {
             </button>
 
             {openDropdown === "tickets" && (
-              <div className="absolute top-full right-0 w-64 z-50 pt-2" style={{ pointerEvents: "auto" }}>
+              <div className="absolute top-full right-0 w-64 z-50 mt-1">
                 <div className="rounded-2xl bg-[#0b1c3e] border border-[#d4af37]/40 shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex flex-col gap-1">
                     <a
