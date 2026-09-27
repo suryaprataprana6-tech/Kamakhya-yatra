@@ -23,7 +23,7 @@ const SLIDES = [
 
 /* ─── Trust Stats ─── */
 const TRUST = [
-  { icon: <Compass className="w-4 h-4" />, value: "500+", label: "Happy Travelers" },
+  { icon: <Compass className="w-4 h-4" />, value: "50K+", label: "Happy Travelers" },
   { icon: <Map     className="w-4 h-4" />, value: "50+",  label: "Destinations" },
   { icon: <Star    className="w-4 h-4" />, value: "4.9★", label: "Google Rated" },
   { icon: <Award   className="w-4 h-4" />, value: "10+",  label: "Years Experience" },
