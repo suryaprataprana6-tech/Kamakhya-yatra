@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
-import { X, Send, Phone, Mail, User, Sparkles, CheckCircle2, MessageCircle } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { X, Send, Phone, Mail, User, Sparkles, CheckCircle2, MessageCircle, ArrowRight } from "lucide-react";
 import { getSavedUserProfile, saveUserProfile } from "@/utils/userProfile";
 import { submitPopupInquiry } from "@/app/admin/actions";
 
 export default function InquiryPopup() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
@@ -28,10 +29,35 @@ export default function InquiryPopup() {
     email?: string;
   }>({});
 
+  // 3-second countdown for Skip/Close action
+  const [skipCountdown, setSkipCountdown] = useState(3);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // 1. Popup Triggering & Session/Storage Check
+  const handleNavigateToDetailedForm = () => {
+    // Save entered values to user profile for safe prefilling
+    saveUserProfile({
+      name: formData.name.trim(),
+      mobile: formData.mobile.trim(),
+      email: formData.email.trim(),
+    });
+
+    // Close popup
+    setIsOpen(false);
+    sessionStorage.setItem("ky_inquiry_popup_dismissed", "true");
+
+    // Construct URL with query parameters if fields are filled
+    const params = new URLSearchParams();
+    if (formData.name.trim()) params.set("name", formData.name.trim());
+    if (formData.mobile.trim()) params.set("phone", formData.mobile.trim());
+    if (formData.email.trim()) params.set("email", formData.email.trim());
+
+    const qs = params.toString();
+    router.push(qs ? `/contact-us?${qs}` : "/contact-us");
+  };
+
+  // 1. Popup Triggering: Immediate appearance on page load
   useEffect(() => {
     // Never show on admin, dashboard, booking or cancellation flows
     if (
@@ -44,69 +70,57 @@ export default function InquiryPopup() {
       return;
     }
 
-    // Check if dismissed in this session
-    const isDismissed = sessionStorage.getItem("ky_inquiry_popup_dismissed");
-    if (isDismissed === "true") return;
+    // In production, preserve session/local storage suppression
+    if (process.env.NODE_ENV !== "development") {
+      const isDismissed = sessionStorage.getItem("ky_inquiry_popup_dismissed");
+      if (isDismissed === "true") return;
 
-    // Check if already submitted in this session or recently
-    const isSubmitted = sessionStorage.getItem("ky_inquiry_popup_submitted");
-    if (isSubmitted === "true") return;
+      const isSubmitted = sessionStorage.getItem("ky_inquiry_popup_submitted");
+      if (isSubmitted === "true") return;
 
-    const submittedTime = localStorage.getItem("ky_inquiry_popup_submitted_time");
-    if (submittedTime) {
-      const elapsed = Date.now() - parseInt(submittedTime, 10);
-      // Suppress if submitted within last 24 hours
-      if (elapsed < 24 * 60 * 60 * 1000) {
-        return;
+      const submittedTime = localStorage.getItem("ky_inquiry_popup_submitted_time");
+      if (submittedTime) {
+        const elapsed = Date.now() - parseInt(submittedTime, 10);
+        // Suppress if submitted within last 24 hours
+        if (elapsed < 24 * 60 * 60 * 1000) {
+          return;
+        }
       }
     }
 
-    let timerId: NodeJS.Timeout | null = null;
-    let hasTriggered = false;
-    const pageStartTime = Date.now();
+    // Auto-fill logic: prefill if legitimate user details exist
+    const saved = getSavedUserProfile();
+    setFormData({
+      name: saved.name || "",
+      mobile: saved.mobile || "",
+      email: saved.email || "",
+      honeypot: "",
+    });
 
-    const triggerPopup = () => {
-      if (hasTriggered) return;
-      hasTriggered = true;
-
-      // Auto-fill logic: only prefill if legitimate user details exist
-      const saved = getSavedUserProfile();
-      setFormData({
-        name: saved.name || "",
-        mobile: saved.mobile || "",
-        email: saved.email || "",
-        honeypot: "",
-      });
-
-      setIsOpen(true);
-    };
-
-    // Non-aggressive trigger 1: Show after 18 seconds of browsing
-    timerId = setTimeout(triggerPopup, 18000);
-
-    // Non-aggressive trigger 2: Show after meaningful scroll (>35%) after at least 6s on page
-    const handleScroll = () => {
-      if (hasTriggered) return;
-      const scrollY = window.scrollY;
-      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight > 400) {
-        const scrollPct = (scrollY / totalHeight) * 100;
-        const timeSpent = Date.now() - pageStartTime;
-        if (scrollPct > 35 && timeSpent > 6000) {
-          triggerPopup();
-        }
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-      if (timerId) clearTimeout(timerId);
-      window.removeEventListener("scroll", handleScroll);
-    };
+    // Show popup immediately upon page load / component mount
+    setSkipCountdown(3);
+    setIsOpen(true);
   }, [pathname]);
 
-  // 2. Accessibility: Focus management & Escape key listener
+  // 2. 3-Second Skip Countdown Timer
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setSkipCountdown(3);
+    const interval = setInterval(() => {
+      setSkipCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
+  // 3. Accessibility: Focus management & Escape key listener (disabled during countdown)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -115,11 +129,14 @@ export default function InquiryPopup() {
       if (nameInputRef.current) {
         nameInputRef.current.focus();
       }
-    }, 120);
+    }, 150);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        handleClose();
+        // Only allow escape to close after 3-second countdown
+        if (skipCountdown === 0) {
+          handleClose();
+        }
       }
     };
 
@@ -128,14 +145,15 @@ export default function InquiryPopup() {
       clearTimeout(focusTimer);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, skipCountdown]);
 
   const handleClose = () => {
+    if (skipCountdown > 0) return; // Prevent closing during 3-second delay
     setIsOpen(false);
     sessionStorage.setItem("ky_inquiry_popup_dismissed", "true");
   };
 
-  // 3. Indian Mobile Number & Field Validations
+  // 4. Indian Mobile Number & Field Validations
   const validateForm = () => {
     const newErrors: { name?: string; mobile?: string; email?: string } = {};
 
@@ -167,7 +185,7 @@ export default function InquiryPopup() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // 4. Form Submission Handler
+  // 5. Form Submission Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -258,8 +276,8 @@ export default function InquiryPopup() {
     <div
       role="presentation"
       onClick={(e) => {
-        // Close when clicking the backdrop
-        if (e.target === e.currentTarget) {
+        // Close when clicking the backdrop only after countdown
+        if (e.target === e.currentTarget && skipCountdown === 0) {
           handleClose();
         }
       }}
@@ -276,15 +294,27 @@ export default function InquiryPopup() {
         {/* Top Gold Accent Bar */}
         <div className="h-1.5 w-full bg-gradient-to-r from-[#0b1c3e] via-[#d4af37] to-[#0b1c3e]" />
 
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Close inquiry dialog"
-          className="absolute top-3.5 right-3.5 z-10 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {/* Top-Right Close "×" Button */}
+        {skipCountdown > 0 ? (
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            aria-label="Close disabled"
+            className="absolute top-3.5 right-3.5 z-10 w-7 h-7 flex items-center justify-center rounded-full text-slate-300 opacity-40 cursor-not-allowed"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Close inquiry dialog"
+            className="absolute top-3.5 right-3.5 z-10 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#d4af37] cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
 
         <div className="p-5">
           {/* Header */}
@@ -462,9 +492,38 @@ export default function InquiryPopup() {
                 )}
               </button>
 
+              {/* Subtle Secondary Detailed Form Link */}
+              <div className="pt-1 text-center">
+                <button
+                  type="button"
+                  onClick={handleNavigateToDetailedForm}
+                  className="text-xs text-[#0b1c3e] hover:text-[#d4af37] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer focus:outline-none"
+                >
+                  <span>Fill Detailed Form</span>
+                  <ArrowRight className="w-3 h-3 text-[#d4af37]" />
+                </button>
+              </div>
+
               <p className="text-[10px] text-center text-slate-400 mt-1">
                 🔒 We respect your privacy. No spam guaranteed.
               </p>
+
+              {/* Subtle Bottom Skip Option with 3s Countdown */}
+              <div className="pt-0.5 text-center">
+                {skipCountdown > 0 ? (
+                  <span className="text-[11px] text-slate-400 font-medium select-none">
+                    Skip in {skipCountdown}s
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="text-[11px] text-slate-500 hover:text-slate-800 font-semibold underline underline-offset-2 transition-colors cursor-pointer focus:outline-none"
+                  >
+                    Skip
+                  </button>
+                )}
+              </div>
             </form>
           ) : null}
         </div>

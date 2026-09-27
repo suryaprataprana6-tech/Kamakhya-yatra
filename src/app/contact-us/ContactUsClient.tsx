@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { MapPin, Phone, Mail, Send, Check } from "lucide-react";
 import { submitLeadAndRedirect } from "@/utils/leads";
+import { getSavedUserProfile } from "@/utils/userProfile";
 
 export default function ContactUsClient() {
   const [formData, setFormData] = useState({
@@ -15,6 +16,22 @@ export default function ContactUsClient() {
     message: ""
   });
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const qName = params.get("name") || "";
+    const qPhone = params.get("phone") || params.get("mobile") || "";
+    const qEmail = params.get("email") || "";
+
+    const saved = getSavedUserProfile();
+    setFormData((prev) => ({
+      ...prev,
+      name: qName || saved.name || prev.name,
+      phone: qPhone || saved.mobile || prev.phone,
+      email: qEmail || saved.email || prev.email,
+    }));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
