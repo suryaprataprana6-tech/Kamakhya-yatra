@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { submitBookingRequest, submitBookingPayment, getPublicFares } from "@/app/admin/actions";
 import BookingInvoice, { InvoiceData } from "@/components/BookingInvoice";
 import { downloadInvoicePDF, printInvoice } from "@/utils/pdfGenerator";
+import { saveUserProfile } from "@/utils/userProfile";
 
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
@@ -148,6 +149,12 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       alert("Please enter a valid 10-15 digit phone number.");
       return;
     }
+
+    saveUserProfile({
+      name: formData.name.trim(),
+      phone: cleanPhone,
+      email: formData.email.trim(),
+    });
 
     setIsSubmitting(true);
     const selectedPkg = packages.find(p => p.title === normalizedPackageName);

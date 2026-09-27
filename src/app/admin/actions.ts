@@ -316,6 +316,7 @@ export async function submitInquiry(data: {
   message?: string;
   source?: string;
   pageUrl?: string;
+  pageTitle?: string;
   utmSource?: string;
   utmCampaign?: string;
 }) {
@@ -367,6 +368,21 @@ export async function submitInquiry(data: {
         return { success: false, error: updateError.message };
       }
 
+      // Synchronize to Google Sheets
+      try {
+        await syncLeadToGoogleSheets({
+          name: data.name,
+          mobile: cleanedPhone,
+          email: data.email,
+          pageUrl: data.pageUrl,
+          pageTitle: data.pageTitle,
+          tourPackage: data.package,
+          source: data.source
+        });
+      } catch (err) {
+        console.warn("Google Sheets sync warning:", err);
+      }
+
       return { success: true, message: "Inquiry updated successfully", id: existing[0].id, isUpdate: true };
     } else {
       // Create new inquiry
@@ -393,6 +409,21 @@ export async function submitInquiry(data: {
         return { success: false, error: insertError.message };
       }
 
+      // Synchronize to Google Sheets
+      try {
+        await syncLeadToGoogleSheets({
+          name: data.name,
+          mobile: cleanedPhone,
+          email: data.email,
+          pageUrl: data.pageUrl,
+          pageTitle: data.pageTitle,
+          tourPackage: data.package,
+          source: data.source
+        });
+      } catch (err) {
+        console.warn("Google Sheets sync warning:", err);
+      }
+
       return { 
         success: true, 
         message: "Inquiry created successfully", 
@@ -404,6 +435,156 @@ export async function submitInquiry(data: {
     console.error("Inquiry submission server error:", err);
     return { success: false, error: err.message };
   }
+}
+
+/**
+ * Sanitizes spreadsheet formula injection characters (=, +, -, @)
+ */
+function sanitizeSpreadsheetFormula(val: string | undefined | null): string {
+  if (!val) return "";
+  const str = String(val).trim().replace(/[\r\n\t]/g, " ");
+  if (/^[=+\-@]/.test(str)) {
+    return "'" + str;
+  }
+  return str;
+}
+
+/**
+ * Synchronizes lead data to Google Sheets Webhook securely from the server
+ */
+export async function syncLeadToGoogleSheets(lead: {
+  name: string;
+  mobile: string;
+  email?: string;
+  pageUrl?: string;
+  pageTitle?: string;
+  tourPackage?: string;
+  source?: string;
+}) {
+  const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL || process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    // Webhook not set, graceful skip
+    return { success: true, skipped: true };
+  }
+
+  try {
+    const payload = {
+      name: sanitizeSpreadsheetFormula(lead.name),
+      mobile: sanitizeSpreadsheetFormula(lead.mobile),
+      email: sanitizeSpreadsheetFormula(lead.email || ""),
+      pageUrl: sanitizeSpreadsheetFormula(lead.pageUrl || ""),
+      pageTitle: sanitizeSpreadsheetFormula(lead.pageTitle || ""),
+      tourPackage: sanitizeSpreadsheetFormula(lead.tourPackage || "General Inquiry"),
+      source: sanitizeSpreadsheetFormula(lead.source || "Website Popup"),
+    };
+
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      console.warn("Google Sheets Webhook HTTP error:", res.status);
+      return { success: false, error: `HTTP ${res.status}` };
+    }
+
+    const json = await res.json().catch(() => ({}));
+    return { success: true, data: json };
+  } catch (err: any) {
+    console.warn("Failed to sync lead to Google Sheets webhook:", err?.message || err);
+    return { success: false, error: "Sync failed" };
+  }
+}
+
+/**
+ * Validated inquiry submission specifically for the Small Inquiry Popup
+ */
+export async function submitPopupInquiry(data: {
+  name: string;
+  mobile: string;
+  email: string;
+  pageUrl?: string;
+  pageTitle?: string;
+  tourPackage?: string;
+  source?: string;
+  honeypot?: string;
+}) {
+  // 1. Anti-spam honeypot check
+  if (data.honeypot && data.honeypot.trim().length > 0) {
+    // Return friendly success to trick spambot without saving
+    return {
+      success: true,
+      message: "Thank you! Your enquiry has been received. Our team will contact you shortly.",
+    };
+  }
+
+  // 2. Name validation
+  const cleanName = data.name?.trim() || "";
+  if (!cleanName || cleanName.length < 2) {
+    return { success: false, error: "Please enter your name." };
+  }
+
+  // 3. Indian 10-digit mobile validation
+  const digitsOnly = (data.mobile || "").replace(/\D/g, "");
+  let mobile10 = digitsOnly;
+  if (mobile10.length === 12 && mobile10.startsWith("91")) {
+    mobile10 = mobile10.substring(2);
+  } else if (mobile10.length === 11 && mobile10.startsWith("0")) {
+    mobile10 = mobile10.substring(1);
+  }
+
+  if (mobile10.length !== 10 || !/^[6-9]\d{9}$/.test(mobile10)) {
+    return {
+      success: false,
+      error: "Please enter a valid 10-digit Indian mobile number.",
+    };
+  }
+
+  // 4. Email validation
+  const cleanEmail = (data.email || "").trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    return { success: false, error: "Please enter a valid email address." };
+  }
+
+  // 5. Submit lead to existing Supabase system (reusing existing lead system)
+  const source = data.source || "Website Popup";
+  const tourPackage = data.tourPackage || "Plan Your Yatra Inquiry";
+
+  const res = await submitInquiry({
+    name: cleanName,
+    phone: mobile10,
+    email: cleanEmail,
+    package: tourPackage,
+    source: source,
+    pageUrl: data.pageUrl,
+    pageTitle: data.pageTitle,
+    message: `Popup Enquiry from: ${data.pageTitle || data.pageUrl || "Website"}`,
+  });
+
+  if (!res.success) {
+    return {
+      success: false,
+      error: "Unable to submit your enquiry right now. Please try again or contact us on WhatsApp.",
+    };
+  }
+
+  // If duplicate lead detected within 30 minutes
+  if (res.isUpdate) {
+    return {
+      success: true,
+      isDuplicate: true,
+      message: "We already received your enquiry. Our team will contact you shortly.",
+    };
+  }
+
+  return {
+    success: true,
+    message: "Thank you! Your enquiry has been received. Our team will contact you shortly.",
+  };
 }
 
 export async function getLeadsData() {

@@ -1,5 +1,6 @@
 import { submitInquiry } from "@/app/admin/actions";
 import { sendInquiryToWhatsApp } from "./whatsapp";
+import { saveUserProfile } from "./userProfile";
 
 // Client-side phone validation
 export function validatePhone(phone: string): boolean {
@@ -26,6 +27,13 @@ export async function submitLeadAndRedirect(
     alert("Please enter a valid phone number with at least 10 digits.");
     return { success: false, error: "Phone number too short" };
   }
+
+  // Save user profile for legitimate auto-fill on subsequent interactions
+  saveUserProfile({
+    name: data.name,
+    phone: data.phone,
+    email: data.email,
+  });
 
   // Get client-side metadata
   const pageUrl = typeof window !== "undefined" ? window.location.href : "";

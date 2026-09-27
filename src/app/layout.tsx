@@ -58,6 +58,7 @@ export const metadata: Metadata = {
 };
 
 import AnalyticsTracker from "@/components/AnalyticsTracker";
+import InquiryPopup from "@/components/InquiryPopup";
 
 export default function RootLayout({
   children,
@@ -130,6 +131,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${outfit.variable} ${playfair.variable} scroll-smooth`}>
       <body className="font-sans bg-slate-50 text-slate-800 antialiased min-h-screen">
         <AnalyticsTracker />
+        <InquiryPopup />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
