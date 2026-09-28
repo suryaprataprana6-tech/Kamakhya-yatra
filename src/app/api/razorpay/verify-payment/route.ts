@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+    const keySecret = rawKeySecret.replace(/^["']|["']$/g, "").trim();
     if (!keySecret) {
       console.error("[Razorpay] Missing RAZORPAY_KEY_SECRET env var");
       return NextResponse.json(

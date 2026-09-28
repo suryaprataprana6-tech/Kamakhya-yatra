@@ -35,8 +35,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const rawKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || "";
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+
+    const keyId = rawKeyId.replace(/^["']|["']$/g, "").trim();
+    const keySecret = rawKeySecret.replace(/^["']|["']$/g, "").trim();
 
     if (!keyId || !keySecret) {
       console.error("[Razorpay] Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET env vars");
@@ -82,8 +85,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Razorpay] Order creation error:", err);
+    const errorDescription = err?.error?.description || err?.message || "Failed to create payment order";
     return NextResponse.json(
-      { error: err.message || "Failed to create payment order" },
+      { 
+        error: errorDescription,
+        statusCode: err?.statusCode || 500,
+        activeKeyPrefix: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ? process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID.trim().slice(0, 12) : "MISSING"
+      },
       { status: 500 }
     );
   }
