@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
       { 
         error: errorDescription,
         statusCode: err?.statusCode || 500,
-        activeKeyPrefix: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ? process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID.trim().slice(0, 12) : "MISSING"
+        activeKeyPrefix: keyId ? keyId.slice(0, 12) : "MISSING",
+        secretLength: keySecret.length
       },
       { status: 500 }
     );
