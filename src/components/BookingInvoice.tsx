@@ -13,6 +13,7 @@ export interface InvoiceData {
   email?: string;
   packageName: string;
   travelDate: string;
+  boardingPoint?: string;
   travellers: number;
   travelClass: string;
   ratePerPerson: number;
@@ -54,6 +55,7 @@ export default function BookingInvoice({ data }: BookingInvoiceProps) {
     email,
     packageName,
     travelDate,
+    boardingPoint,
     travellers,
     travelClass,
     ratePerPerson,
@@ -326,6 +328,16 @@ export default function BookingInvoice({ data }: BookingInvoiceProps) {
               </span>
               <strong style={{ color: "#b45309", fontWeight: 900, textTransform: "uppercase" }}>{travelClass}</strong>
             </div>
+            {boardingPoint && (
+              <div style={{ gridColumn: "1 / -1", borderTop: "1px dashed #e2e8f0", paddingTop: "5px", marginTop: "2px" }}>
+                <span style={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, display: "block", textTransform: "uppercase" }}>
+                  Boarding Station &amp; Yatra Route
+                </span>
+                <strong style={{ color: "#0b1c3e", fontWeight: 800, fontSize: "9.5px" }}>
+                  🚆 {boardingPoint}
+                </strong>
+              </div>
+            )}
           </div>
         </div>
 

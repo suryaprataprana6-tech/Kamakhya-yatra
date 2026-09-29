@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, ArrowRight, ShieldCheck, Download, Printer, CreditCard, Loader } from "lucide-react";
+import { MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, ArrowRight, ShieldCheck, Download, Printer, CreditCard, Loader, Train, ArrowDown, Compass } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { submitBookingRequest, getPublicFares } from "@/app/admin/actions";
@@ -10,6 +10,7 @@ import BookingInvoice, { InvoiceData } from "@/components/BookingInvoice";
 import { downloadInvoicePDF, printInvoice } from "@/utils/pdfGenerator";
 import { saveUserProfile } from "@/utils/userProfile";
 import { trackLead } from "@/utils/metaPixel";
+import { getAllIndianStates, getStationsForState, getArrivalStationFromItinerary } from "@/data/boardingData";
 
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
@@ -33,18 +34,46 @@ function BookingFormContent({ packages }: { packages: any[] }) {
 
   const [advanceAmount, setAdvanceAmount] = useState(5000);
 
+  const initialPackage = packageParam
+    ? (packages.find(p => p.slug === packageParam || p.title?.toLowerCase().includes(packageParam.toLowerCase()))?.title || packageParam)
+    : (packages[0]?.title || "");
+
   // Step 1 Form Data
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
-    package: "",
+    package: initialPackage,
     travelClass: "",
     date: "",
     guests: "1",
+    boardingState: "",
+    boardingStation: "",
     specialRequirements: "",
     termsAccepted: false
   });
+
+  // Dynamic itinerary arrival station and state -> railway station options
+  const selectedPkg = packages.find(
+    (p) =>
+      p.title?.trim().toLowerCase() === formData.package?.trim().toLowerCase() ||
+      p.slug === formData.package
+  ) || (formData.package ? { title: formData.package, itinerary: [] } : packages[0]);
+
+  const yatraArrivalStation = getArrivalStationFromItinerary(selectedPkg);
+
+  const indianStates = getAllIndianStates();
+  const availableStations = formData.boardingState
+    ? getStationsForState(formData.boardingState)
+    : [];
+
+  const handleBoardingStateChange = (stateName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      boardingState: stateName,
+      boardingStation: "", // reset station when state changes
+    }));
+  };
 
   const [fareRule, setFareRule] = useState<any>(null);
   const [packageCost, setPackageCost] = useState(0);
@@ -126,7 +155,17 @@ function BookingFormContent({ packages }: { packages: any[] }) {
 
     const normalizedPackageName = formData.package?.trim() || packages[0]?.title || "Custom Plan";
     if (!formData.name.trim() || !formData.phone.trim() || !formData.email.trim() || !formData.date) {
-      alert("Please fill all required fields.");
+      alert("Please fill all required traveler and journey details.");
+      return;
+    }
+
+    if (!formData.boardingState) {
+      alert("Please select your Boarding State.");
+      return;
+    }
+
+    if (!formData.boardingStation) {
+      alert("Please select your Boarding Station.");
       return;
     }
     
@@ -159,7 +198,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     });
 
     setIsSubmitting(true);
-    const selectedPkg = packages.find(p => p.title === normalizedPackageName);
+    const targetPkg = packages.find(p => p.title === normalizedPackageName) || selectedPkg;
 
     try {
       const res = await submitBookingRequest({
@@ -167,9 +206,13 @@ function BookingFormContent({ packages }: { packages: any[] }) {
         phone: cleanPhone,
         email: formData.email.trim(),
         packageName: normalizedPackageName,
-        packageId: selectedPkg ? selectedPkg.id : undefined,
+        packageId: targetPkg ? targetPkg.id : undefined,
         travelDate: formData.date,
-        boardingPoint: "Guwahati Airport / Railway Station",
+        boardingPoint: `${formData.boardingStation}, ${formData.boardingState}`,
+        boardingState: formData.boardingState,
+        boardingStation: formData.boardingStation,
+        mainBoardingPoint: "Ranchi Junction",
+        yatraArrivalStation: yatraArrivalStation,
         numberOfTravellers: parseInt(formData.guests) || 1,
         specialRequirements: formData.specialRequirements.trim() || undefined,
         source: "booking_crm_form",
@@ -230,6 +273,9 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       email: formData.email || "",
       packageName: formData.package || "Kamakhya Yatra Tour",
       travelDate: formData.date ? new Date(formData.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "As Scheduled",
+      boardingPoint: formData.boardingStation && formData.boardingState
+        ? `${formData.boardingStation}, ${formData.boardingState} (Via Ranchi Junction → ${yatraArrivalStation})`
+        : undefined,
       travellers: guestsCount,
       travelClass: formData.travelClass || "Standard",
       ratePerPerson: computedRatePerPerson,
@@ -506,6 +552,186 @@ function BookingFormContent({ packages }: { packages: any[] }) {
                   onChange={(e) => setFormData({ ...formData, guests: e.target.value })}
                   className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-slate-50/50"
                 />
+              </div>
+            </div>
+
+            {/* BOARDING DETAILS SECTION */}
+            <div className="bg-slate-50/90 rounded-2xl p-5 md:p-6 border border-slate-200/90 flex flex-col gap-5">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#0b1c3e] text-[#d4af37] flex items-center justify-center shadow-sm">
+                    <Train className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#0b1c3e] uppercase tracking-wide">
+                      Boarding Details
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Select your origin station for connecting journey to Ranchi
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 bg-amber-100 text-amber-900 rounded-full border border-amber-200">
+                  Required
+                </span>
+              </div>
+
+              {/* State & Station Dropdowns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1">
+                    Your Boarding State <span className="text-rose-500 font-black">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.boardingState}
+                    onChange={(e) => handleBoardingStateChange(e.target.value)}
+                    className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-white font-medium text-slate-800"
+                  >
+                    <option value="">-- Select State --</option>
+                    {indianStates.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-400">
+                    Select Indian State or Union Territory of departure.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1">
+                    Your Boarding Station <span className="text-rose-500 font-black">*</span>
+                  </label>
+                  <select
+                    required
+                    disabled={!formData.boardingState}
+                    value={formData.boardingStation}
+                    onChange={(e) => setFormData({ ...formData, boardingStation: e.target.value })}
+                    className={`p-3 border rounded-xl text-sm font-medium transition ${
+                      !formData.boardingState
+                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-white border-slate-200 focus:outline-none focus:border-[#0b1c3e] text-slate-800"
+                    }`}
+                  >
+                    <option value="">
+                      {formData.boardingState
+                        ? "-- Select Station --"
+                        : "-- Select State First --"}
+                    </option>
+                    {availableStations.map((station) => (
+                      <option key={station.code} value={station.name}>
+                        {station.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-400">
+                    {!formData.boardingState
+                      ? "Choose your state first to load railway stations."
+                      : `${availableStations.length} railway stations available in ${formData.boardingState}.`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Connecting Journey & Main Yatra Visual Sequence */}
+              <div className="bg-white rounded-xl p-4 md:p-5 border border-slate-200/90 shadow-sm flex flex-col gap-3.5">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                  <span>Itinerary Boarding &amp; Transit Sequence</span>
+                  <span className="text-emerald-700 font-bold flex items-center gap-1 text-[10px]">
+                    <CheckCircle className="w-3 h-3 text-emerald-600" /> Connecting Assistance Included
+                  </span>
+                </div>
+
+                {/* 1. Passenger Origin Station */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-full bg-blue-50 text-[#0b1c3e] flex items-center justify-center shrink-0 mt-0.5 font-extrabold text-xs border border-blue-100">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Passenger Origin Station
+                    </span>
+                    <strong className="text-xs text-[#0b1c3e] block">
+                      {formData.boardingStation || (formData.boardingState ? "Select your station above" : "Pending State & Station selection")}
+                    </strong>
+                    {formData.boardingState && (
+                      <span className="text-[11px] text-slate-500 block">
+                        State: {formData.boardingState}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Connecting Journey Arrow */}
+                <div className="flex items-center gap-2 pl-3 text-slate-400">
+                  <ArrowDown className="w-4 h-4 text-[#d4af37]" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0b1c3e] bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    ↓ Connecting Journey
+                  </span>
+                </div>
+
+                {/* 2. Main Yatra Boarding Point */}
+                <div className="flex items-start gap-3 bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/80">
+                  <div className="w-8 h-8 rounded-lg bg-[#0b1c3e] text-white flex items-center justify-center shrink-0 font-bold text-sm shadow-sm">
+                    🚆
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-[#0b1c3e] uppercase tracking-wider">
+                        Main Yatra Boarding Point
+                      </span>
+                      <span className="text-[9px] bg-[#0b1c3e] text-[#d4af37] font-bold px-2 py-0.5 rounded-full">
+                        Central Hub
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-[#0b1c3e] mt-0.5">
+                      Ranchi Junction
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      Your connecting journey will be arranged from your selected boarding station to Ranchi.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Main Yatra Expedition Arrow */}
+                <div className="flex items-center gap-2 pl-3 text-slate-400">
+                  <ArrowDown className="w-4 h-4 text-[#0b1c3e]" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0b1c3e] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    ↓ Main Yatra
+                  </span>
+                </div>
+
+                {/* 3. Arrival Station */}
+                <div className="flex items-start gap-3 bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200/80">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center shrink-0 font-bold text-sm shadow-sm">
+                    📍
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider">
+                        Arrival Station
+                      </span>
+                      <span className="text-[9px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                        Auto-Loaded from Day 1 Itinerary
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-[#0b1c3e] mt-0.5">
+                      {yatraArrivalStation}
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      Main Yatra begins from Ranchi and arrives at <strong className="text-slate-800">{yatraArrivalStation}</strong> as scheduled in the Day 1 tour itinerary.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Helper / Compact explainer */}
+                <div className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-start gap-2 mt-1 leading-relaxed">
+                  <Compass className="w-4 h-4 text-[#0b1c3e] shrink-0 mt-0.5" />
+                  <span>
+                    <strong>How it works:</strong> The passenger first boards from their selected station, then connects to Ranchi, from where the main Yatra begins. All connecting rail tickets, logistics, and guidance are coordinated by our team.
+                  </span>
+                </div>
               </div>
             </div>
 

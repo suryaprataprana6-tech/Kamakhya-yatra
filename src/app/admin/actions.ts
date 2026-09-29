@@ -1513,6 +1513,10 @@ export async function submitBookingRequest(data: {
   packageId?: number;
   travelDate: string;
   boardingPoint: string;
+  boardingState?: string;
+  boardingStation?: string;
+  mainBoardingPoint?: string;
+  yatraArrivalStation?: string;
   numberOfTravellers: number;
   specialRequirements?: string;
   source?: string;
@@ -1529,7 +1533,7 @@ export async function submitBookingRequest(data: {
 }) {
   try {
     // 1. Basic validation
-    if (!data.customerName || !data.phone || !data.email || !data.packageName || !data.travelDate || !data.boardingPoint || !data.numberOfTravellers) {
+    if (!data.customerName || !data.phone || !data.email || !data.packageName || !data.travelDate || !data.numberOfTravellers) {
       return { success: false, error: "Missing required fields" };
     }
 
@@ -1631,6 +1635,19 @@ export async function submitBookingRequest(data: {
       ? Math.round(data.packageCost / data.numberOfTravellers)
       : 0;
 
+    // Construct structured boarding details if provided
+    const effectiveBoardingPoint = (data.boardingStation && data.boardingState)
+      ? `${data.boardingStation}, ${data.boardingState} (Via ${data.mainBoardingPoint || "Ranchi Junction"} → ${data.yatraArrivalStation || "As per itinerary"})`
+      : (data.boardingPoint || "Ranchi Junction");
+
+    const boardingDetailsSummary = (data.boardingState && data.boardingStation)
+      ? `[Boarding Details: State: ${data.boardingState} | Station: ${data.boardingStation} | Main Boarding Point: ${data.mainBoardingPoint || "Ranchi Junction"} | Yatra Arrival: ${data.yatraArrivalStation || "As per itinerary"}]`
+      : null;
+
+    const effectiveSpecialRequirements = [boardingDetailsSummary, data.specialRequirements]
+      .filter(Boolean)
+      .join("\n\n") || null;
+
     // 2. Insert record into Supabase booking_requests table
     console.log(`[submitBookingRequest] Step 1/5: Attempting database INSERT for customer ${data.customerName} (${cleanPhone})...`);
     let record: any = null;
@@ -1645,9 +1662,9 @@ export async function submitBookingRequest(data: {
         package_name: data.packageName,
         package_id: data.packageId || null,
         travel_date: data.travelDate,
-        boarding_point: data.boardingPoint,
+        boarding_point: effectiveBoardingPoint,
         number_of_travellers: data.numberOfTravellers,
-        special_requirements: data.specialRequirements || null,
+        special_requirements: effectiveSpecialRequirements,
         booking_amount: data.packageCost || (5000.00 * data.numberOfTravellers),
         advance_amount: data.advanceAmount || 5000.00,
         package_cost: data.packageCost || 0,
@@ -1684,9 +1701,9 @@ export async function submitBookingRequest(data: {
         package_name: data.packageName,
         package_id: data.packageId || null,
         travel_date: data.travelDate,
-        boarding_point: data.boardingPoint,
+        boarding_point: effectiveBoardingPoint,
         number_of_travellers: data.numberOfTravellers,
-        special_requirements: data.specialRequirements || null,
+        special_requirements: effectiveSpecialRequirements,
         booking_amount: data.packageCost || (5000.00 * data.numberOfTravellers),
         advance_amount: data.advanceAmount || 5000.00,
         package_cost: data.packageCost || 0,

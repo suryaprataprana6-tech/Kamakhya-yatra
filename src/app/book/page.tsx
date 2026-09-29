@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import BookClient from "./BookClient";
 import { supabaseServer } from "@/utils/supabaseServer";
 
+import { packagesData } from "@/data/packages";
+
 export const metadata: Metadata = {
   title: "Book Your Yatra | Kamakhya Yatra",
   description: "Secure your spiritual pilgrimage or holiday tour package. Send booking inquiries directly to our luxury travel specialists.",
@@ -13,10 +15,12 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function Page() {
-  const { data: packages } = await supabaseServer
+  const { data: dbPackages } = await supabaseServer
     .from("packages")
     .select("*")
     .order("id", { ascending: true });
 
-  return <BookClient initialPackages={packages || []} />;
+  const packages = dbPackages && dbPackages.length > 0 ? dbPackages : packagesData;
+
+  return <BookClient initialPackages={packages} />;
 }
