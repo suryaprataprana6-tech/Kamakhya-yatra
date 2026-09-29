@@ -85,14 +85,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Razorpay] Order creation error:", err);
-    const errorDescription = err?.error?.description || err?.message || "Failed to create payment order";
     return NextResponse.json(
-      { 
-        error: errorDescription,
-        statusCode: err?.statusCode || 500,
-        activeKeyPrefix: keyId ? keyId.slice(0, 12) : "MISSING",
-        secretLength: keySecret.length
-      },
+      { error: err?.error?.description || err?.message || "Failed to create payment order" },
       { status: 500 }
     );
   }
