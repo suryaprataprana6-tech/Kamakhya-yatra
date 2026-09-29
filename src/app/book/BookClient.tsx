@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Send, MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, Copy, Upload, ArrowRight, ShieldCheck, Download, Printer, CreditCard, Loader } from "lucide-react";
+import { MapPin, Calendar, Users, Phone, User, Mail, MessageSquare, CheckCircle, ArrowRight, ShieldCheck, Download, Printer, CreditCard, Loader } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { submitBookingRequest, submitBookingPayment, getPublicFares } from "@/app/admin/actions";
+import { submitBookingRequest, getPublicFares } from "@/app/admin/actions";
 import BookingInvoice, { InvoiceData } from "@/components/BookingInvoice";
 import { downloadInvoicePDF, printInvoice } from "@/utils/pdfGenerator";
 import { saveUserProfile } from "@/utils/userProfile";
@@ -49,15 +49,11 @@ function BookingFormContent({ packages }: { packages: any[] }) {
   const [packageCost, setPackageCost] = useState(0);
   const [balanceAmount, setBalanceAmount] = useState(0);
 
-  // Step 2 Form Data
+  // Step 2 Payment State
   const [transactionId, setTransactionId] = useState("");
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
 
   // Razorpay state
-  const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "upi">("razorpay");
   const [isRazorpayLoading, setIsRazorpayLoading] = useState(false);
   const [razorpayPaymentId, setRazorpayPaymentId] = useState<string | null>(null);
 
@@ -201,13 +197,6 @@ function BookingFormContent({ packages }: { packages: any[] }) {
     }
   };
 
-  // Copy UPI details
-  const copyUPI = () => {
-    navigator.clipboard.writeText("7079044000-3@ybl");
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
-
   const getSelectedServices = () => {
     if (!fareRule) return { hotel: "Standard", meals: "Basic", transport: "Shared Vehicle", support: "Normal" };
     switch (formData.travelClass) {
@@ -240,7 +229,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       totalPackageCost: packageCost,
       amountPaid: advanceAmount,
       balanceDue: balanceAmount,
-      paymentMethod: razorpayPaymentId ? "Razorpay Online Payment" : "UPI / Bank Transfer",
+      paymentMethod: "Razorpay Online Payment",
       transactionId: razorpayPaymentId || transactionId || "Pending Verification",
       paymentStatus: "Pending Verification",
       bookingVerificationStatus: "Pending Verification",
@@ -272,19 +261,6 @@ function BookingFormContent({ packages }: { packages: any[] }) {
 
   const handlePrintInvoice = () => {
     printInvoice();
-  };
-
-  // Handle image preview
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert("File size exceeds 5MB limit.");
-        return;
-      }
-      setScreenshotFile(file);
-      setScreenshotPreview(URL.createObjectURL(file));
-    }
   };
 
   // Load Razorpay checkout script dynamically
@@ -399,7 +375,7 @@ function BookingFormContent({ packages }: { packages: any[] }) {
         console.error("Razorpay payment failed:", response.error);
         alert(
           `Payment failed: ${response.error.description || "Unknown error"}. ` +
-          `You can try again or use UPI manual payment.`
+          `Please try again or contact support.`
         );
         setIsRazorpayLoading(false);
       });
@@ -411,33 +387,6 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       setIsRazorpayLoading(false);
     }
   }, [bookingId, advanceAmount, formData, bookingRef, loadRazorpayScript]);
-
-  // Handle Step 2 payment details submission
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bookingId || !transactionId || !screenshotFile) {
-      alert("Please enter the Transaction ID and upload the payment screenshot.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const paymentData = new FormData();
-      paymentData.append("screenshot", screenshotFile);
-
-      const res = await submitBookingPayment(bookingId, transactionId, paymentData);
-      if (res.success) {
-        setStep(3);
-      } else {
-        alert("Payment submission failed: " + (res.error || "Please verify your inputs."));
-      }
-    } catch (err) {
-      console.error(err);
-      alert("An error occurred during payment uploading.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
@@ -678,160 +627,47 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               )}
             </div>
 
-            {/* Payment Method Tabs */}
-            <div className="flex flex-col gap-4">
-              <h3 className="text-lg font-bold text-[#0b1c3e] border-l-4 border-[#d4af37] pl-3">Choose Payment Method</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("razorpay")}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
-                    paymentMethod === "razorpay"
-                      ? "border-[#0b1c3e] bg-[#0b1c3e]/5 shadow-md"
-                      : "border-slate-200 hover:border-slate-300 bg-white"
-                  }`}
-                >
-                  <CreditCard className={`w-6 h-6 ${paymentMethod === "razorpay" ? "text-[#0b1c3e]" : "text-slate-400"}`} />
-                  <span className={`text-xs font-extrabold ${paymentMethod === "razorpay" ? "text-[#0b1c3e]" : "text-slate-500"}`}>Pay Online</span>
-                  <span className="text-[9px] text-slate-400">Card / UPI / Netbanking</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("upi")}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
-                    paymentMethod === "upi"
-                      ? "border-[#0b1c3e] bg-[#0b1c3e]/5 shadow-md"
-                      : "border-slate-200 hover:border-slate-300 bg-white"
-                  }`}
-                >
-                  <Upload className={`w-6 h-6 ${paymentMethod === "upi" ? "text-[#0b1c3e]" : "text-slate-400"}`} />
-                  <span className={`text-xs font-extrabold ${paymentMethod === "upi" ? "text-[#0b1c3e]" : "text-slate-500"}`}>Manual UPI</span>
-                  <span className="text-[9px] text-slate-400">Transfer & Upload</span>
-                </button>
+            {/* Pay Online with Razorpay */}
+            <div className="flex flex-col gap-5">
+              <div className="bg-gradient-to-br from-[#0b1c3e]/5 to-[#d4af37]/5 p-6 rounded-2xl border border-[#0b1c3e]/10 flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0b1c3e] flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-[#0b1c3e]">Secure Online Payment</h4>
+                    <p className="text-[10px] text-slate-400">Powered by Razorpay — India&apos;s trusted payment gateway</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-white rounded-xl p-3 border border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-bold block">Credit/Debit</span>
+                    <span className="text-[9px] text-slate-300">Visa, Mastercard, RuPay</span>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-bold block">UPI</span>
+                    <span className="text-[9px] text-slate-300">GPay, PhonePe, Paytm</span>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-bold block">Netbanking</span>
+                    <span className="text-[9px] text-slate-300">All major banks</span>
+                  </div>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={handleRazorpayPayment}
+                disabled={isRazorpayLoading}
+                className="bg-[#0b1c3e] hover:bg-[#1e3c72] disabled:bg-slate-400 text-white font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition duration-200 shadow-lg shadow-[#0b1c3e]/10 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {isRazorpayLoading ? (
+                  <><Loader className="w-4 h-4 animate-spin" /> Processing Payment...</>
+                ) : (
+                  <><CreditCard className="w-4 h-4" /> Pay ₹{advanceAmount.toLocaleString("en-IN")} Securely Online</>
+                )}
+              </button>
             </div>
-
-            {/* RAZORPAY PAYMENT */}
-            {paymentMethod === "razorpay" && (
-              <div className="flex flex-col gap-5">
-                <div className="bg-gradient-to-br from-[#0b1c3e]/5 to-[#d4af37]/5 p-6 rounded-2xl border border-[#0b1c3e]/10 flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#0b1c3e] flex items-center justify-center">
-                      <ShieldCheck className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-extrabold text-[#0b1c3e]">Secure Online Payment</h4>
-                      <p className="text-[10px] text-slate-400">Powered by Razorpay — India&apos;s trusted payment gateway</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-white rounded-xl p-3 border border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-bold block">Credit/Debit</span>
-                      <span className="text-[9px] text-slate-300">Visa, Mastercard, RuPay</span>
-                    </div>
-                    <div className="bg-white rounded-xl p-3 border border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-bold block">UPI</span>
-                      <span className="text-[9px] text-slate-300">GPay, PhonePe, Paytm</span>
-                    </div>
-                    <div className="bg-white rounded-xl p-3 border border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-bold block">Netbanking</span>
-                      <span className="text-[9px] text-slate-300">All major banks</span>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleRazorpayPayment}
-                  disabled={isRazorpayLoading}
-                  className="bg-[#0b1c3e] hover:bg-[#1e3c72] disabled:bg-slate-400 text-white font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition duration-200 shadow-lg shadow-[#0b1c3e]/10 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {isRazorpayLoading ? (
-                    <><Loader className="w-4 h-4 animate-spin" /> Processing Payment...</>
-                  ) : (
-                    <><CreditCard className="w-4 h-4" /> Pay ₹{advanceAmount.toLocaleString("en-IN")} Securely Online</>
-                  )}
-                </button>
-              </div>
-            )}
-
-            {/* MANUAL UPI PAYMENT (existing flow) */}
-            {paymentMethod === "upi" && (
-              <form onSubmit={handlePaymentSubmit} className="flex flex-col gap-6">
-                <h3 className="text-lg font-bold text-[#0b1c3e] border-l-4 border-[#d4af37] pl-3">UPI Payment Instructions</h3>
-                <p className="text-xs text-slate-500 leading-relaxed -mt-3">
-                  To lock in your booking, please scan the QR code or transfer the advance amount to the official UPI ID. Once paid, input the transaction ID and upload the receipt screenshot below.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                  <div className="flex flex-col items-center gap-2 border-r border-slate-200/60 max-sm:border-r-0 max-sm:border-b max-sm:pb-4 max-sm:mb-2">
-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase">Official Merchant UPI ID</span>
-                    <strong className="text-sm text-[#0b1c3e]">7079044000-3@ybl</strong>
-                    <button 
-                      type="button" 
-                      onClick={copyUPI} 
-                      className="inline-flex items-center gap-1 text-xs text-[#d4af37] hover:text-[#b8952d] font-bold border border-[#d4af37]/20 bg-white px-3 py-1.5 rounded-lg transition"
-                    >
-                      <Copy className="w-3 h-3" /> {copySuccess ? "Copied!" : "Copy UPI ID"}
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-1.5 text-center">
-                    <ShieldCheck className="w-8 h-8 text-emerald-500" />
-                    <span className="text-[11px] font-bold text-[#0b1c3e]">Secure Direct Banking</span>
-                    <p className="text-[10px] text-slate-400 max-w-[200px]">Direct-to-bank instant validation avoids third-party gateway delays.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {/* Screenshot Upload */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1.5"><Upload className="w-4 h-4 text-slate-400" /> Payment Screenshot</label>
-                    <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-[#0b1c3e] transition bg-slate-50/30 min-h-[140px]">
-                      {screenshotPreview ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <img src={screenshotPreview} alt="Screenshot Preview" className="h-20 object-contain rounded-lg shadow" />
-                          <span className="text-[10px] text-slate-400 truncate max-w-[150px]">{screenshotFile?.name}</span>
-                        </div>
-                      ) : (
-                        <>
-                          <Upload className="w-8 h-8 text-slate-300" />
-                          <span className="text-[10px] text-slate-400 text-center font-bold">PNG, JPG or WEBP (Max 5MB)</span>
-                        </>
-                      )}
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleFileChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Transaction ID */}
-                  <div className="flex flex-col justify-end gap-2">
-                    <label className="text-xs font-bold text-[#0b1c3e] flex items-center gap-1.5">Transaction ID / UTR</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter 12-digit UTR/Txn Number"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value.trim())}
-                      className="p-3 border border-slate-200 focus:outline-none focus:border-[#0b1c3e] rounded-xl text-sm bg-slate-50/50"
-                    />
-                    <span className="text-[9px] text-slate-400 leading-tight">Usually found in GooglePay, PhonePe, or Paytm receipt header.</span>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit" 
-                  disabled={isSubmitting} 
-                  className="bg-[#0b1c3e] hover:bg-[#1e3c72] disabled:bg-slate-400 text-white font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 mt-2 transition duration-200 shadow-lg shadow-[#0b1c3e]/10"
-                >
-                  {isSubmitting ? "Uploading Receipt Details..." : "Submit Payment for Verification"} <Send className="w-4 h-4" />
-                </button>
-              </form>
-            )}
           </div>
         )}
 
@@ -944,8 +780,8 @@ function BookingFormContent({ packages }: { packages: any[] }) {
               <span className="text-slate-500">Every luxury tour requires an advance token deposit of ₹{advanceAmount.toLocaleString("en-IN")} to trigger backend reservations.</span>
             </li>
             <li>
-              <strong className="block text-[#0b1c3e] mb-1 font-bold">2. Quick Verification</strong>
-              <span className="text-slate-500">Manual transaction uploads are verified within 2 to 4 business hours by our billing accounts manager.</span>
+              <strong className="block text-[#0b1c3e] mb-1 font-bold">2. Instant Verification</strong>
+              <span className="text-slate-500">Online payments are processed instantly and automated booking confirmation receipts are issued immediately.</span>
             </li>
             <li>
               <strong className="block text-[#0b1c3e] mb-1 font-bold">3. Transparent Refund Guarantee</strong>
@@ -983,7 +819,7 @@ export default function BookTour({ initialPackages }: { initialPackages: any[] }
           <div className="max-w-3xl mx-auto">
             <h1 className="text-3xl md:text-5xl font-extrabold font-heading mb-4">Book Your Yatra</h1>
             <p className="text-sm md:text-base text-slate-200 leading-relaxed">
-              Plan and lock in your pilgrimage or holiday tour package instantly using our manual secure UPI checkout.
+              Plan and lock in your pilgrimage or holiday tour package instantly using our secure online checkout.
             </p>
           </div>
         </div>
