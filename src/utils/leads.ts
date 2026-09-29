@@ -1,6 +1,7 @@
 import { submitInquiry } from "@/app/admin/actions";
 import { sendInquiryToWhatsApp } from "./whatsapp";
 import { saveUserProfile } from "./userProfile";
+import { trackLead } from "./metaPixel";
 
 // Client-side phone validation
 export function validatePhone(phone: string): boolean {
@@ -50,6 +51,10 @@ export async function submitLeadAndRedirect(
   });
 
   if (response.success) {
+    trackLead({
+      content_name: data.package || source,
+      content_category: "Tour Inquiry",
+    });
     if (shouldRedirectToWhatsApp) {
       sendInquiryToWhatsApp(data);
     }

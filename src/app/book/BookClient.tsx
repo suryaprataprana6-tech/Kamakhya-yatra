@@ -9,6 +9,7 @@ import { submitBookingRequest, getPublicFares } from "@/app/admin/actions";
 import BookingInvoice, { InvoiceData } from "@/components/BookingInvoice";
 import { downloadInvoicePDF, printInvoice } from "@/utils/pdfGenerator";
 import { saveUserProfile } from "@/utils/userProfile";
+import { trackLead } from "@/utils/metaPixel";
 
 function BookingFormContent({ packages }: { packages: any[] }) {
   const searchParams = useSearchParams();
@@ -180,6 +181,12 @@ function BookingFormContent({ packages }: { packages: any[] }) {
       });
 
       if (res.success && res.id && res.booking_reference) {
+        trackLead({
+          content_name: normalizedPackageName,
+          content_category: "Tour Booking Request",
+          value: advanceAmount,
+          currency: "INR",
+        });
         setBookingId(res.id);
         setBookingRef(res.booking_reference);
         if (res.invoice_number) {

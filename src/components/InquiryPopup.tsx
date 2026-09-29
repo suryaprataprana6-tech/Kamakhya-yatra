@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { X, Send, Phone, Mail, User, Sparkles, CheckCircle2, MessageCircle, ArrowRight } from "lucide-react";
 import { getSavedUserProfile, saveUserProfile } from "@/utils/userProfile";
 import { submitPopupInquiry } from "@/app/admin/actions";
+import { trackLead } from "@/utils/metaPixel";
 
 export default function InquiryPopup() {
   const pathname = usePathname();
@@ -234,6 +235,11 @@ export default function InquiryPopup() {
       });
 
       if (res.success) {
+        trackLead({
+          content_name: tourPackage || "Website Popup Inquiry",
+          content_category: "Popup Lead",
+        });
+
         if (res.isDuplicate) {
           setStatusMessage({
             type: "duplicate",

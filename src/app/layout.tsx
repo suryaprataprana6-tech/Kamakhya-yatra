@@ -59,6 +59,7 @@ export const metadata: Metadata = {
 
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import InquiryPopup from "@/components/InquiryPopup";
+import MetaPixel from "@/components/MetaPixel";
 
 export default function RootLayout({
   children,
@@ -130,6 +131,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable} ${playfair.variable} scroll-smooth`}>
       <body className="font-sans bg-slate-50 text-slate-800 antialiased min-h-screen">
+        <MetaPixel />
         <AnalyticsTracker />
         <InquiryPopup />
         <script
